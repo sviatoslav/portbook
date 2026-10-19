@@ -11,6 +11,10 @@ import (
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
+// ErrAlreadyExists and ErrNotFound distinguish lifecycle conflicts from storage failures.
+var ErrAlreadyExists = errors.New("reservation already exists")
+var ErrNotFound = errors.New("reservation not found")
+
 var ErrExhausted = errors.New("no available ports in the configured pool")
 
 type Store struct {
@@ -69,13 +73,12 @@ func (s Store) Reserve(ctx context.Context, directory, service string) (int, err
 		if err != nil {
 			return err
 		}
+		if r[key][service] != 0 {
+			return fmt.Errorf("%w for service %q in %q", ErrAlreadyExists, service, key)
+		}
 		pool, err := s.Config.Read()
 		if err != nil {
 			return err
-		}
-		if existing := r[key][service]; existing != 0 {
-			port = existing
-			return ctx.Err()
 		}
 		used := map[int]bool{}
 		for _, services := range r {

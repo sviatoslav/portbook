@@ -19,7 +19,7 @@ import (
 type failedWriter struct{}
 
 func (failedWriter) Write([]byte) (int, error) { return 0, errors.New("stdout closed") }
-func TestReservePlainOutputAndCommittedOutputFailure(t *testing.T) {
+func TestGetPlainOutputAndOutputFailure(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
@@ -46,7 +46,7 @@ func TestReservePlainOutputAndCommittedOutputFailure(t *testing.T) {
 	os.WriteFile(path, data, 0600)
 	for _, terminal := range []bool{true, false} {
 		for _, format := range []string{"", "json", "table"} {
-			args := []string{"reserve", "--directory", owner}
+			args := []string{"get", "default", "--directory", owner}
 			if format != "" {
 				args = append(args, "--output", format)
 			}
@@ -57,7 +57,7 @@ func TestReservePlainOutputAndCommittedOutputFailure(t *testing.T) {
 		}
 	}
 	var diag bytes.Buffer
-	if code := Run(context.Background(), []string{"reserve", "--directory", owner}, failedWriter{}, &diag, false); code != 1 {
+	if code := Run(context.Background(), []string{"get", "default", "--directory", owner}, failedWriter{}, &diag, false); code != 1 {
 		t.Fatal(code, diag.String())
 	}
 	after, err := os.ReadFile(path)
@@ -94,13 +94,14 @@ func TestReserveNewBookingSurvivesOutputFailure(t *testing.T) {
 		t.Fatal(code, diag.String())
 	}
 	owner := t.TempDir()
-	args := []string{"reserve", "--directory", owner}
+	args := []string{"reserve", "default", "--directory", owner}
 	diag.Reset()
 	if code := Run(context.Background(), args, failedWriter{}, &diag, false); code != 1 || !strings.Contains(diag.String(), `"code":"runtime_error"`) {
 		t.Fatal(code, diag.String())
 	}
 	out.Reset()
 	diag.Reset()
+	args[0] = "get"
 	if code := Run(context.Background(), args, &out, &diag, false); code != 0 || out.String() != fmt.Sprint(port)+"\n" {
 		t.Fatal(code, out.String(), diag.String())
 	}
@@ -116,8 +117,8 @@ func TestReserveDiagnosticFormats(t *testing.T) {
 			json bool
 		}{
 			{[]string{"reserve", "a", "b"}, !terminal},
-			{[]string{"reserve", "--directory=relative", "--output=table"}, false},
-			{[]string{"reserve", "--directory=relative", "--output=json"}, true},
+			{[]string{"reserve", "default", "--directory=relative", "--output=table"}, false},
+			{[]string{"reserve", "default", "--directory=relative", "--output=json"}, true},
 			{[]string{"reserve", "--bogus", "--output=table", "--output=json"}, false},
 			{[]string{"reserve", "a", "--", "--output=json"}, !terminal},
 		} {

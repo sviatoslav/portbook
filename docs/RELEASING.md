@@ -33,7 +33,9 @@ ELF/Mach-O architecture, Go module/build metadata and commit. It extracts and
 runs only the host's native binary. The smoke test covers version, table/JSON
 help, error output, fresh read-only list/cleanup, missing-config defaults of
 49152–65535 (16,384 ports), config changes, bare-port reserve
-and reuse, listing, release and no-op release, and abandoned-owner cleanup.
+and read-only get, required-service validation, explicit literal `default`
+compatibility, duplicate-reserve refusal, listing, release and missing-release
+refusal, and abandoned-owner cleanup.
 All runtime configuration and bookings use temporary HOME/XDG/config/owner
 paths, removed afterwards. It does not access real Portbook data.
 

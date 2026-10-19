@@ -30,9 +30,8 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	cfg := t.TempDir()
 	root := registryRoot(t, cfg)
 	owner := t.TempDir()
-	missing := releaseJSON(t, run(t, cfg, 0, "release", "--directory", owner))
-	if missing.Released || missing.Port != nil || missing.Service != "default" {
-		t.Fatal(missing)
+	if got := run(t, cfg, 1, "release", "default", "--directory", owner); !strings.Contains(got, "reservation not found") {
+		t.Fatal(got)
 	}
 	path := filepath.Join(root, booking.File)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -43,7 +42,7 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	for _, l := range held {
 		l.Close()
 	}
-	run(t, cfg, 0, "reserve", "--directory", owner)
+	run(t, cfg, 0, "reserve", "default", "--directory", owner)
 	run(t, cfg, 0, "reserve", "other", "--directory", owner)
 	before, err := os.ReadFile(path)
 	if err != nil {
@@ -56,11 +55,11 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	// Release uses neither the selected pool nor the saved pointer, including help.
 	os.WriteFile(filepath.Join(cfg, "config.json"), []byte("broken"), 0600)
 	os.WriteFile(filepath.Join(root, "location.json"), []byte("broken"), 0600)
-	if got := run(t, cfg, 0, "release", "--help"); !strings.Contains(got, "release [SERVICE]") {
+	if got := run(t, cfg, 0, "release", "--help"); !strings.Contains(got, "release SERVICE") {
 		t.Fatal(got)
 	}
 	alternate := t.TempDir()
-	cmd := command(cfg, "release", "--directory", alias, "--config-dir", alternate)
+	cmd := command(cfg, "release", "default", "--directory", alias, "--config-dir", alternate)
 	// Invalid selection environment is irrelevant without an explicit flag.
 	cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative")
 	res := releaseJSON(t, processResult(t, cmd, 0))
@@ -81,10 +80,10 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	if err := json.Unmarshal(after, &doc); err != nil || len(doc.Bookings[physical]) != 1 || doc.Bookings[physical]["other"] != p[1] {
 		t.Fatal(string(after), err)
 	}
-	cmd = command(cfg, "release")
+	cmd = command(cfg, "release", "default")
 	cmd.Dir = owner
-	if res := releaseJSON(t, processResult(t, cmd, 0)); res.Released || res.Port != nil {
-		t.Fatal(res)
+	if got := processResult(t, cmd, 1); !strings.Contains(got, "reservation not found") {
+		t.Fatal(got)
 	}
 	unchanged, _ := os.ReadFile(path)
 	if !bytes.Equal(after, unchanged) {
@@ -93,7 +92,7 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	if got := run(t, cfg, 0, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "Released port") {
 		t.Fatal(got)
 	}
-	if got := run(t, cfg, 0, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "No booking") {
+	if got := run(t, cfg, 1, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "reservation not found") {
 		t.Fatal(got)
 	}
 	for _, name := range []string{"config.json", "location.json"} {
@@ -122,7 +121,7 @@ func TestReleaseCLIBusyAndCorruptionPreserveState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if got := run(t, cfg, 1, "release", "--directory", owner); !strings.Contains(got, `"code":"runtime_error"`) {
+		if got := run(t, cfg, 1, "release", "default", "--directory", owner); !strings.Contains(got, `"code":"runtime_error"`) {
 			t.Fatal(got)
 		}
 		after, _ := os.ReadFile(path)
@@ -133,7 +132,7 @@ func TestReleaseCLIBusyAndCorruptionPreserveState(t *testing.T) {
 	for _, bad := range []string{"broken", `{"version":2,"bookings":{}}`, `{"version":1,"bookings":{"/gone":{"x":1,"x":2}}}`} {
 		os.WriteFile(path, []byte(bad), 0600)
 		for i := 0; i < 2; i++ {
-			if got := run(t, cfg, 1, "release", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
+			if got := run(t, cfg, 1, "release", "default", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
 				t.Fatal(got)
 			}
 			after, _ := os.ReadFile(path)
@@ -150,12 +149,12 @@ func TestReleaseCLIValidationAndFlagBoundaries(t *testing.T) {
 	file := filepath.Join(owner, "file")
 	os.WriteFile(file, []byte("keep"), 0600)
 	for _, args := range [][]string{
-		{"release", "a", "b"}, {"release", ""}, {"release", "--directory="},
-		{"release", "--directory=relative"}, {"release", "--directory", file},
-		{"release", "--directory", filepath.Join(owner, "absent")},
-		{"release", "--directory", owner, "--directory", owner}, {"release", "--all"},
+		{"release", "a", "b"}, {"release", ""}, {"release", "default", "--directory="},
+		{"release", "default", "--directory=relative"}, {"release", "default", "--directory", file},
+		{"release", "default", "--directory", filepath.Join(owner, "absent")},
+		{"release", "default", "--directory", owner, "--directory", owner}, {"release", "--all"},
 		{"release", "--output=yaml"}, {"release", "--output=json", "--output=table"},
-		{"release", "a", "b", "--help"}, {"release", "--directory=relative", "--help"},
+		{"release", "a", "b", "--help"}, {"release", "default", "--directory=relative", "--help"},
 		{"release", "--config-dir=relative"}, {"release", "--unknown", "--output=json"},
 	} {
 		if got := run(t, cfg, 2, args...); !strings.Contains(got, `"code":"usage_error"`) {
@@ -163,16 +162,15 @@ func TestReleaseCLIValidationAndFlagBoundaries(t *testing.T) {
 		}
 	}
 	for _, service := range []string{"--help", "--output=table", "服务"} {
-		res := releaseJSON(t, run(t, cfg, 0, "release", "--directory", owner, "--", service))
-		if res.Service != service || res.Released {
-			t.Fatal(res)
+		if got := run(t, cfg, 1, "release", "--directory", owner, "--", service); !strings.Contains(got, "reservation not found") {
+			t.Fatal(got)
 		}
 	}
 	noAccess := t.TempDir()
 	os.Chmod(noAccess, 0000)
 	defer os.Chmod(noAccess, 0700)
 	if os.Geteuid() != 0 {
-		run(t, cfg, 2, "release", "--directory", noAccess)
+		run(t, cfg, 2, "release", "default", "--directory", noAccess)
 	}
 }
 
@@ -185,7 +183,7 @@ func TestReleaseReserveIndependentProcessOrdering(t *testing.T) {
 	for _, l := range held {
 		l.Close()
 	}
-	run(t, cfg, 0, "reserve", "--directory", owner)
+	run(t, cfg, 0, "reserve", "default", "--directory", owner)
 	// Queue a real release process behind the same OS lock. It cannot finish
 	// while held; after unlocking, both mutations must produce a serial result.
 	lock := flock.New(filepath.Join(root, "state.lock"))
@@ -193,7 +191,7 @@ func TestReleaseReserveIndependentProcessOrdering(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lock.Close()
-	cmds := []*exec.Cmd{command(cfg, "release", "--directory", owner), command(cfg, "reserve", "new", "--directory", owner)}
+	cmds := []*exec.Cmd{command(cfg, "release", "default", "--directory", owner), command(cfg, "reserve", "new", "--directory", owner)}
 	outs := make([]bytes.Buffer, 2)
 	diags := make([]bytes.Buffer, 2)
 	for i, cmd := range cmds {
@@ -249,7 +247,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cmd := command(cfg, "reserve")
+	cmd := command(cfg, "reserve", "default")
 	cmd.Dir = owner
 	if got := processResult(t, cmd, 0); got != strconv.Itoa(p[0])+"\n" {
 		t.Fatal(got)
@@ -265,7 +263,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if len(rows) != 2 || rows[0] != (booking.Entry{Directory: canonical, Service: "default", Port: p[0]}) || rows[1] != (booking.Entry{Directory: canonical, Service: "server", Port: p[1]}) {
 		t.Fatal(rows)
 	}
-	res := releaseJSON(t, run(t, cfg, 0, "release", "--directory", alias))
+	res := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", alias))
 	if !res.Released || res.Port == nil || *res.Port != p[0] {
 		t.Fatal(res)
 	}
@@ -273,7 +271,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if len(rows) != 1 || rows[0].Service != "server" || rows[0].Port != p[1] {
 		t.Fatal(rows)
 	}
-	if got := run(t, cfg, 0, "reserve", "--directory", owner); got != strconv.Itoa(p[0])+"\n" {
+	if got := run(t, cfg, 0, "reserve", "default", "--directory", owner); got != strconv.Itoa(p[0])+"\n" {
 		t.Fatal("released port not reusable", got)
 	}
 	run(t, cfg, 0, "config", "remove", "--all")
@@ -283,7 +281,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "location.json"), []byte("broken pointer"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, feature := range []string{"list", "release"} {
+	for _, feature := range []string{"get", "list", "release"} {
 		cmd := command(cfg, feature, "--help")
 		cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative unused")
 		if got := processResult(t, cmd, 0); !strings.Contains(got, "--directory") {
@@ -294,7 +292,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatal(rows)
 	}
-	if got := run(t, cfg, 1, "reserve", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
+	if got := run(t, cfg, 1, "reserve", "new", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
 		t.Fatal(got)
 	}
 	res = releaseJSON(t, run(t, cfg, 0, "release", "server", "--directory", alias))

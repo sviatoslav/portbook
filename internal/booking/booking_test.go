@@ -46,7 +46,7 @@ func reserve(t *testing.T, s Store, dir, service string) int {
 	return p
 }
 
-func TestSelectionAndStableReuse(t *testing.T) {
+func TestSelectionAndDuplicateReservation(t *testing.T) {
 	s, dir := fixture(t, ports.Range{Start: 40000, End: 40002}, ports.Range{Start: 50000, End: 50000})
 	calls := []int{}
 	s.Probe = func(_ context.Context, p int) (bool, error) { calls = append(calls, p); return p != 40000, nil }
@@ -67,12 +67,12 @@ func TestSelectionAndStableReuse(t *testing.T) {
 	if _, _, err := s.Config.Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return 0, nil }); err != nil {
 		t.Fatal(err)
 	}
-	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("reuse probed"); return false, nil }
-	if p := reserve(t, s, dir, "server"); p != 40001 {
-		t.Fatal(p)
+	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("duplicate probed"); return false, nil }
+	if p, err := s.Reserve(context.Background(), dir, "server"); p != 0 || !errors.Is(err, ErrAlreadyExists) {
+		t.Fatal(p, err)
 	}
 	if !bytes.Equal(before, contents(t, path)) {
-		t.Fatal("reuse rewrote registry")
+		t.Fatal("duplicate rewrote registry")
 	}
 	if p, err := s.Reserve(context.Background(), dir, "new"); p != 0 || !errors.Is(err, ErrExhausted) {
 		t.Fatal(p, err)
@@ -88,7 +88,7 @@ func TestIdentityAndDirectoryValidation(t *testing.T) {
 	if err := os.Symlink(dir, alias); err != nil {
 		t.Fatal(err)
 	}
-	if a, b := reserve(t, s, dir, "服務 / Version"), reserve(t, s, alias, "服務 / Version"); a != b {
+	if a, b := reserve(t, s, dir, "服務 / Version"), get(t, s, alias, "服務 / Version"); a != b {
 		t.Fatal(a, b)
 	}
 	if a, b := reserve(t, s, dir, "version"), reserve(t, s, dir, "VERSION"); a == b {
@@ -233,14 +233,14 @@ func TestFailuresNeverSaveAndReleaseLock(t *testing.T) {
 		t.Fatal("bypassed global lock")
 	}
 	held.Close()
-	// Config and pointer reads are fail-closed, including reuse.
+	// New allocations fail closed on config and pointer errors.
 	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("bad"), 0600)
-	if _, err := s.Reserve(context.Background(), dir, "a"); err == nil {
+	if _, err := s.Reserve(context.Background(), dir, "new"); err == nil {
 		t.Fatal("ignored corrupt config")
 	}
 	os.Remove(filepath.Join(s.Config.Coordinator.Dir, "config.json"))
 	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "location.json"), []byte("bad pointer"), 0600)
-	if _, err := s.Reserve(context.Background(), dir, "a"); err == nil {
+	if _, err := s.Reserve(context.Background(), dir, "new"); err == nil {
 		t.Fatal("ignored corrupt pointer")
 	}
 	os.Remove(filepath.Join(s.Config.Coordinator.Dir, "location.json"))
@@ -278,7 +278,7 @@ func TestSaveFailurePreservesPriorBookings(t *testing.T) {
 	}
 }
 
-func TestRealTCPProbeAndOccupiedReuse(t *testing.T) {
+func TestRealTCPProbeAndOccupiedGet(t *testing.T) {
 	for _, network := range []string{"tcp4", "tcp6"} {
 		t.Run(network, func(t *testing.T) {
 			host := "127.0.0.1:0"
@@ -307,7 +307,7 @@ func TestRealTCPProbeAndOccupiedReuse(t *testing.T) {
 				t.Fatal("exhaustion saved", err)
 			}
 			// Seed a valid pre-existing booking, then verify listener presence has no
-			// effect on reuse and the registry is not rewritten.
+			// effect on get and the registry is not rewritten.
 			canonical, err := Directory(dir)
 			if err != nil {
 				t.Fatal(err)
@@ -315,11 +315,14 @@ func TestRealTCPProbeAndOccupiedReuse(t *testing.T) {
 			data, _ := encode(Registry{canonical: {"server": p}})
 			path := filepath.Join(s.Config.Coordinator.Dir, File)
 			os.WriteFile(path, data, 0600)
-			if got := reserve(t, s, dir, "server"); got != p {
+			if got := get(t, s, dir, "server"); got != p {
 				t.Fatal(got)
 			}
+			if got, err := s.Reserve(context.Background(), dir, "server"); got != 0 || !errors.Is(err, ErrAlreadyExists) {
+				t.Fatal(got, err)
+			}
 			if !bytes.Equal(data, contents(t, path)) {
-				t.Fatal("reuse rewrote file")
+				t.Fatal("get rewrote file")
 			}
 		})
 	}
@@ -346,7 +349,7 @@ func TestSelectionUsesGlobalRegistryAndDoesNotWriteConfigOrPointer(t *testing.T)
 	if p := reserve(t, s, dir, "default"); p != 45000 {
 		t.Fatal(p)
 	}
-	if p := reserve(t, s, dir, "server"); p != 45001 {
+	if p := get(t, s, dir, "server"); p != 45001 {
 		t.Fatal(p)
 	}
 	if !bytes.Equal(pointer, contents(t, filepath.Join(root, "location.json"))) || !bytes.Equal(cfg, contents(t, filepath.Join(custom, "config.json"))) {
@@ -418,7 +421,7 @@ func TestCaseAliasesFollowFilesystemIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _ := fixture(t, ports.Range{Start: 48000, End: 48002})
-	if a, b := reserve(t, s, dir, "server"), reserve(t, s, alias, "server"); a != b {
+	if a, b := reserve(t, s, dir, "server"), get(t, s, alias, "server"); a != b {
 		t.Fatalf("same filesystem directory has duplicate bookings: %d != %d", a, b)
 	}
 }

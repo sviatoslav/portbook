@@ -90,7 +90,7 @@ func registryRoot(t *testing.T, dir string) string {
 	}
 	return loc.Directory
 }
-func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
+func TestReserveCLISelectionCwdAliasesAndGet(t *testing.T) {
 	cfg := t.TempDir()
 	p, held := candidateSockets(t, 4)
 	configCandidates(t, cfg, p)
@@ -105,7 +105,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 	os.Mkdir(nested, 0700)
 	os.Mkdir(filepath.Join(owner, ".git"), 0700)
 	// Keep the lowest candidate occupied by an unmanaged loopback listener.
-	cmd := command(cfg, "reserve")
+	cmd := command(cfg, "reserve", "default")
 	cmd.Dir = nested
 	want := fmt.Sprint(p[1]) + "\n"
 	if got := processResult(t, cmd, 0); got != want {
@@ -116,9 +116,9 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"reserve", "default", "--directory", nested},
-		{"--output=json", "reserve", "--directory", alias},
-		{"reserve", "default", "--directory", nested, "--output=table"},
+		{"get", "default", "--directory", nested},
+		{"--output=json", "get", "default", "--directory", alias},
+		{"get", "default", "--directory", nested, "--output=table"},
 	} {
 		if got := run(t, cfg, 0, args...); got != want {
 			t.Fatal(args, got, want)
@@ -129,7 +129,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 	}
 	// An idle booking remains unavailable to a different directory, even if it
 	// has the same service. The nested cwd did not collapse into its Git root.
-	if got := run(t, cfg, 0, "reserve", "--directory", owner); got != fmt.Sprint(p[3])+"\n" {
+	if got := run(t, cfg, 0, "reserve", "default", "--directory", owner); got != fmt.Sprint(p[3])+"\n" {
 		t.Fatal(got)
 	}
 	root := registryRoot(t, cfg)
@@ -153,7 +153,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 		t.Fatal(string(before))
 	}
 	run(t, cfg, 0, "config", "remove", "--all")
-	if got := run(t, cfg, 0, "reserve", "--directory", nested); got != want {
+	if got := run(t, cfg, 0, "get", "default", "--directory", nested); got != want {
 		t.Fatal(got)
 	}
 	if got := run(t, cfg, 1, "reserve", "extra", "--directory", nested); !strings.Contains(got, `"code":"runtime_error"`) {
@@ -161,7 +161,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 	}
 	after, _ := os.ReadFile(path)
 	if !bytes.Equal(before, after) {
-		t.Fatal("reuse/exhaustion rewrote bookings")
+		t.Fatal("get/exhaustion rewrote bookings")
 	}
 	for _, name := range []string{booking.File, "state.lock", "location.json"} {
 		if _, err := os.Stat(filepath.Join(cfg, name)); !os.IsNotExist(err) {
@@ -176,13 +176,13 @@ func TestReserveCLIValidationHelpAndBoundaries(t *testing.T) {
 	file := filepath.Join(owner, "file")
 	os.WriteFile(file, []byte("keep"), 0600)
 	for _, args := range [][]string{
-		{"reserve", "a", "b"}, {"reserve", ""}, {"reserve", "--directory="},
-		{"reserve", "--directory", "relative"}, {"reserve", "--directory", file},
-		{"reserve", "--directory", filepath.Join(owner, "absent")},
-		{"reserve", "--directory", owner, "--directory", owner},
+		{"reserve", "a", "b"}, {"reserve", ""}, {"reserve", "default", "--directory="},
+		{"reserve", "default", "--directory", "relative"}, {"reserve", "default", "--directory", file},
+		{"reserve", "default", "--directory", filepath.Join(owner, "absent")},
+		{"reserve", "default", "--directory", owner, "--directory", owner},
 		{"reserve", "--all"}, {"config", "show", "--directory", owner},
 		{"reserve", "--output=yaml"}, {"reserve", "--output=json", "--output=table"},
-		{"reserve", "a", "b", "--help"}, {"reserve", "--directory=relative", "--help"},
+		{"reserve", "a", "b", "--help"}, {"reserve", "default", "--directory=relative", "--help"},
 	} {
 		got := run(t, cfg, 2, args...)
 		if !strings.Contains(got, `"code":"usage_error"`) {
@@ -191,7 +191,7 @@ func TestReserveCLIValidationHelpAndBoundaries(t *testing.T) {
 	}
 	for _, args := range [][]string{{"reserve", "--help"}, {"reserve", "server", "--directory", owner, "--help"}} {
 		got := run(t, cfg, 0, args...)
-		if !strings.Contains(got, "reserve [SERVICE]") || !strings.Contains(got, "--directory") {
+		if !strings.Contains(got, "reserve SERVICE") || !strings.Contains(got, "--directory") {
 			t.Fatal(got)
 		}
 	}
@@ -219,7 +219,7 @@ func TestReserveCLIValidationHelpAndBoundaries(t *testing.T) {
 	os.Chmod(noAccess, 0000)
 	defer os.Chmod(noAccess, 0700)
 	if os.Geteuid() != 0 {
-		if got := run(t, cfg, 2, "reserve", "--directory", noAccess); !strings.Contains(got, "cannot access directory") {
+		if got := run(t, cfg, 2, "reserve", "default", "--directory", noAccess); !strings.Contains(got, "cannot access directory") {
 			t.Fatal(got)
 		}
 	}
@@ -257,8 +257,13 @@ func TestReserveIndependentConcurrentProcesses(t *testing.T) {
 			}
 		}
 		seen := map[string]bool{}
+		failures := 0
 		for i, cmd := range cmds {
 			if err := cmd.Wait(); err != nil {
+				if same && cmd.ProcessState.ExitCode() == 1 && outs[i].Len() == 0 && strings.Contains(diags[i].String(), "reservation already exists") && strings.Contains(diags[i].String(), `"code":"runtime_error"`) {
+					failures++
+					continue
+				}
 				t.Fatalf("worker %d: %v %s", i, err, &diags[i])
 			}
 			if diags[i].Len() != 0 {
@@ -274,7 +279,7 @@ func TestReserveIndependentConcurrentProcesses(t *testing.T) {
 			}
 			seen[port] = true
 		}
-		if same && len(seen) != 1 {
+		if same && (len(seen) != 1 || failures != workers-1) {
 			t.Fatal("same identity diverged", seen)
 		}
 	}
@@ -303,7 +308,7 @@ func TestReserveCorruptRegistryEvidenceAcrossProcesses(t *testing.T) {
 	for _, bad := range []string{"broken", `{"version":2,"bookings":{}}`, `{"version":1,"bookings":{"/gone":{"x":1,"x":2}}}`} {
 		os.WriteFile(path, []byte(bad), 0600)
 		for i := 0; i < 2; i++ {
-			got := run(t, cfg, 1, "reserve", "--directory", owner)
+			got := run(t, cfg, 1, "reserve", "default", "--directory", owner)
 			if !strings.Contains(got, `"code":"storage_error"`) {
 				t.Fatal(got)
 			}
@@ -354,8 +359,8 @@ func TestReserveConfigPrecedenceKeepsOneGlobalRegistry(t *testing.T) {
 			t.Fatal(i, got, p[i])
 		}
 	}
-	// Reuse is independent of whichever pool is now selected.
-	if got := locationRun(t, home, 0, "reserve", "flag", "--directory", owner); got != flag {
+	// Get is independent of whichever pool is now selected.
+	if got := locationRun(t, home, 0, "get", "flag", "--directory", owner); got != flag {
 		t.Fatal(got, flag)
 	}
 	after, _ := os.ReadFile(pointerPath)
