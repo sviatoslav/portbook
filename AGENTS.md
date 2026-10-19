@@ -1,8 +1,11 @@
 # Portbook development
 
-- Current scope is configuration and single-service `reserve`. Add listing,
-  release, cleanup, batch reservations, or other features only when explicitly
+- Current scope is configuration, single-service `reserve`, and read-only `list`.
+  Add release, cleanup, batch reservations, or other features only when explicitly
   requested.
+- List reads only the fixed registry snapshot, without config/pointer reads, locks,
+  writes, or probes. Scoped listing uses reserve owner identity; `--all` retains
+  disappeared owner paths. Sort by directory then service; keep empty JSON arrays.
 - Reserve prints only the decimal port and newline, regardless of output format.
   Owners are canonical existing directories, defaulting to cwd without Git-root
   discovery. Keep stable reuse even outside the pool or with a listener present.
