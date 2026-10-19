@@ -1,24 +1,32 @@
 # Portbook
 
-Stable local ports for your projects and coding agents.
+Portbook coordinates local TCP port reservations across projects, worktrees, and
+coding agents. Each directory and service ID keeps its assigned port; new
+reservations skip ports already booked or in use.
 
-[Install from source](#build-or-install-from-source) (Go 1.26+), then:
+From your project directory (port numbers are illustrative):
 
 ```console
-$ portbook reserve
+$ portbook reserve api
 49152
+$ portbook reserve api
+49152
+$ portbook reserve web
+49153
 ```
+
+[Install from source](#build-or-install-from-source) (Go 1.26+).
 
 ## Installation
 
 The public repository is available now under the [MIT License](#license).
-The first release, `v0.1.0`, is being prepared; its tag and downloadable assets
-have not been published. The download and tagged-install commands below become
-available after that release.
+Source installation is available now. Binary downloads and versioned source
+installation require a published release, listed on the
+[GitHub Releases page](https://github.com/sviatoslav/portbook/releases).
 
-### Download a release (after the first release)
+### Download a release
 
-Standalone executables require no Go installation. Planned archive names are:
+Standalone executables require no Go installation. Release archives use these suffixes:
 
 | System | CPU (`uname -m`) | Archive suffix |
 | --- | --- | --- |
@@ -33,13 +41,14 @@ not prove runtime support. Windows and other platforms are outside this release
 scope. macOS binaries are unsigned and not notarized; downloaded files may be
 subject to macOS security checks.
 
-After a release exists, open the
+Open the
 [GitHub Releases page](https://github.com/sviatoslav/portbook/releases), select a
 specific version, and download its matching archive and `checksums.txt` into a
 new temporary download directory. Published public release assets will be
 downloadable without signing in.
 
-The following is an example **after** `v0.1.0` is published, for macOS arm64.
+The following example targets `v0.1.0` on macOS arm64. Use it once that release
+is listed on GitHub.
 Replace the version and archive suffix using the table. Run these commands from
 the directory containing the two downloads. Stop if checksum verification fails:
 
@@ -81,12 +90,11 @@ Add that directory to PATH. After a public version tag exists, an example tagged
 source install is:
 
 ```sh
-# Future example; v0.1.0 is not an existing release in this preparation slice.
+# Choose a published version tag.
 go install github.com/sviatoslav/portbook/cmd/portbook@v0.1.0
 ```
 
-The module path is prepared for this command; remote tagged installation cannot
-be verified until the tag is published.
+Versioned source installation requires the selected tag to be published.
 
 ### Update or uninstall
 
@@ -107,7 +115,7 @@ and bookings remain in the locations documented below; no automatic data
 cleanup or migration occurs.
 
 Maintainers: see [release preparation and publication](docs/RELEASING.md) for
-local snapshot checks, CI gates, and future intentional tag steps.
+local snapshot checks, CI gates, and intentional tag steps.
 
 ## Usage
 
