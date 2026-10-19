@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/config"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func cleanupFixture(t *testing.T, r Registry) Store {

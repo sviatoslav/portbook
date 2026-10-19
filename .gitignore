@@ -1,1 +1,4 @@
 /bin/
+/dist/
+/portbook
+__pycache__/

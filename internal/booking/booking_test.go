@@ -15,16 +15,16 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/config"
-	"portbook/internal/ports"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func fixture(t *testing.T, ranges ...ports.Range) (Store, string) {
 	t.Helper()
 	c := state.Coordinator{Dir: t.TempDir(), LockTimeout: 40 * time.Millisecond}
 	cfg := config.Store{Coordinator: c}
-	if _, _, err := cfg.Mutate(context.Background(), func(p *ports.Pool) (int, error) { return p.Apply(ranges, true), nil }); err != nil {
+	if _, _, err := cfg.Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return p.Apply(ranges, true), nil }); err != nil {
 		t.Fatal(err)
 	}
 	return Store{Config: cfg, Probe: func(context.Context, int) (bool, error) { return true, nil }}, t.TempDir()
@@ -506,5 +506,44 @@ func TestAmbiguousPhysicalOwnersFailClosed(t *testing.T) {
 	}
 	if !bytes.Equal(data, contents(t, path)) {
 		t.Fatal("ambiguous registry changed")
+	}
+}
+
+func TestMissingConfigAllocatesLowestDefaultAndSkipsBookedBusy(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	owner := t.TempDir()
+	var probed []int
+	s.Probe = func(_ context.Context, p int) (bool, error) { probed = append(probed, p); return p != 49152, nil }
+	if p := reserve(t, s, owner, "default"); p != 49153 {
+		t.Fatal(p)
+	}
+	if p := reserve(t, s, t.TempDir(), "default"); p != 49154 {
+		t.Fatal(p)
+	}
+	if fmt.Sprint(probed) != "[49152 49153 49152 49154]" {
+		t.Fatal(probed)
+	}
+	if _, err := os.Stat(filepath.Join(root, "config.json")); !os.IsNotExist(err) {
+		t.Fatal("reserve wrote config", err)
+	}
+}
+
+func TestMissingConfigDefaultIncludesLastTCPPort(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	probes := 0
+	s.Probe = func(_ context.Context, p int) (bool, error) {
+		if p < 49152 || p > 65535 {
+			t.Fatalf("outside default pool: %d", p)
+		}
+		probes++
+		return p == 65535, nil
+	}
+	if port := reserve(t, s, t.TempDir(), "last"); port != 65535 || probes != 16384 {
+		t.Fatal(port, probes)
+	}
+	if _, err := os.Stat(filepath.Join(root, "config.json")); !os.IsNotExist(err) {
+		t.Fatal("reserve persisted defaults", err)
 	}
 }

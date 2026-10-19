@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 const LocationFile = "location.json"

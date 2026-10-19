@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"portbook/internal/ports"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func TestCallbackFailureDoesNotSaveAndReleasesLock(t *testing.T) {

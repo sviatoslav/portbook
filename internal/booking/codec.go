@@ -8,7 +8,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 const File = "bookings.json"

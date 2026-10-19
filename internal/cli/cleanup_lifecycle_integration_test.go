@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 )
 
 func TestCleanupListReleaseReserveCombinedLifecycle(t *testing.T) {

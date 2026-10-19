@@ -1,4 +1,4 @@
-module portbook
+module github.com/sviatoslav/portbook
 
 go 1.26.0
 

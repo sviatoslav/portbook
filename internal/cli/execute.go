@@ -4,8 +4,8 @@ import (
 	"context"
 	"path/filepath"
 
-	"portbook/internal/config"
-	"portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 )
 
 func (o *options) showConfig(_ context.Context) (result, error) {
@@ -21,15 +21,15 @@ func (o *options) showConfig(_ context.Context) (result, error) {
 }
 
 func (o *options) addConfig(ctx context.Context, ranges []ports.Range) (result, error) {
-	return o.mutateConfig(ctx, "config ranges add", func(p *ports.Pool) (int, error) { return p.Apply(ranges, true), nil })
+	return o.mutateConfig(ctx, "config add", func(p *ports.Pool) (int, error) { return p.Apply(ranges, true), nil })
 }
 
 func (o *options) removeConfig(ctx context.Context, ranges []ports.Range) (result, error) {
-	return o.mutateConfig(ctx, "config ranges remove", func(p *ports.Pool) (int, error) { return p.Apply(ranges, false), nil })
+	return o.mutateConfig(ctx, "config remove", func(p *ports.Pool) (int, error) { return p.Apply(ranges, false), nil })
 }
 
 func (o *options) clearConfig(ctx context.Context) (result, error) {
-	return o.mutateConfig(ctx, "config ranges remove", func(p *ports.Pool) (int, error) { n := p.Count(); *p = ports.Pool{}; return n, nil })
+	return o.mutateConfig(ctx, "config remove", func(p *ports.Pool) (int, error) { n := p.Count(); *p = ports.Pool{}; return n, nil })
 }
 
 func (o *options) mutateConfig(ctx context.Context, command string, change func(*ports.Pool) (int, error)) (result, error) {

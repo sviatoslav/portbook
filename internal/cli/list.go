@@ -10,9 +10,9 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"portbook/internal/booking"
-	"portbook/internal/config"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func newListCommand(o *options, out io.Writer) *cobra.Command {

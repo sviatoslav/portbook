@@ -129,7 +129,7 @@ func TestNonUTF8ConfigSelectionsFailBeforeWrites(t *testing.T) {
 		{[]string{"config", "path", "set", invalid}, 2},
 		{[]string{"config", "path", "get", "--config-dir", invalid}, 2},
 		{[]string{"config", "path", "get", "--config-dir", invalid, "--help"}, 2},
-		{[]string{"config", "ranges", "add", "1234"}, 1},
+		{[]string{"config", "add", "1234"}, 1},
 	} {
 		var out, diag bytes.Buffer
 		if code := Run(context.Background(), tc.args, &out, &diag, false); code != tc.code || out.Len() != 0 || !strings.Contains(diag.String(), "UTF-8") {

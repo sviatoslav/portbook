@@ -1,18 +1,121 @@
-name: Test
-on: [push, pull_request]
+name: Test and package
+on:
+  pull_request:
+  push:
+    branches: [master]
+    tags: ['v[0-9]*']
 permissions:
   contents: read
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-15, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - run: go test ./...
       - run: go test -race ./...
       - run: go vet ./...
-      - run: go build ./cmd/portbook
+      - run: go build -o bin/portbook ./cmd/portbook
+  package:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.3
+          install-only: true
+      - run: python3 -m unittest discover -s scripts -p "*_test.py"
+      - run: goreleaser check
+      - name: Package without publishing
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            python3 scripts/check-release-tag.py "$TAG"
+            goreleaser release --clean --skip=publish
+            python3 scripts/verify-release.py dist --version "${TAG#v}" --commit "$(git rev-parse HEAD)"
+          else
+            scripts/release-snapshot.sh
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-packages
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/metadata.json
+          if-no-files-found: error
+          retention-days: 7
+  smoke:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages
+          path: dist
+      - name: Verify and run extracted native binary
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            python3 scripts/verify-release.py dist --version "${TAG#v}" --commit "$(git rev-parse HEAD)"
+          else
+            python3 scripts/verify-release.py dist --commit "$(git rev-parse HEAD)"
+          fi
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [package, smoke]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages
+          path: dist
+      - name: Publish the tested archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/check-release-tag.py "$TAG"
+          cd dist
+          sha256sum --check checksums.txt
+          case "$TAG" in
+            *-*) set -- --prerelease ;;
+            *) set -- ;;
+          esac
+          gh release create "$TAG" ./*.tar.gz checksums.txt \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" \
+            --generate-notes "$@"

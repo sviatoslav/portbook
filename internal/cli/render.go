@@ -3,9 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 	"io"
-	"portbook/internal/config"
-	"portbook/internal/ports"
 	"text/tabwriter"
 )
 
@@ -85,7 +85,7 @@ func render(w io.Writer, format string, res result) error {
 	}
 	if res.Changed != nil {
 		verb := "Added"
-		if res.Command == "config ranges remove" {
+		if res.Command == "config remove" {
 			verb = "Removed"
 		}
 		_, err := fmt.Fprintf(w, "%s %d %s. Total: %d %s.\n", verb, *res.Changed, noun(*res.Changed), res.Total, noun(res.Total))

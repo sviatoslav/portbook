@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 )
 
 func releaseJSON(t *testing.T, text string) booking.ReleaseResult {
@@ -276,7 +276,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if got := run(t, cfg, 0, "reserve", "--directory", owner); got != strconv.Itoa(p[0])+"\n" {
 		t.Fatal("released port not reusable", got)
 	}
-	run(t, cfg, 0, "config", "ranges", "remove", "--all")
+	run(t, cfg, 0, "config", "remove", "--all")
 	if err := os.WriteFile(filepath.Join(cfg, "config.json"), []byte("broken pool"), 0600); err != nil {
 		t.Fatal(err)
 	}

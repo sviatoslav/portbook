@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/ports"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func testLocation(t *testing.T) Location {
@@ -207,7 +207,7 @@ func TestRelocatedMutationsShareLockAndResolveAfterAcquisition(t *testing.T) {
 		t.Fatal("used stale selection", err)
 	}
 	p, err := readConfig(second)
-	if err != nil || p.Count() != 1 {
+	if err != nil || p.Count() != 16385 {
 		t.Fatal(p, err)
 	}
 }
@@ -349,12 +349,12 @@ func TestStoreCoordinatorOwnsSelectionAndLockRoot(t *testing.T) {
 			t.Fatal(err)
 		}
 		p, err := store.Read()
-		if err != nil || p.Count() != 1 {
+		if err != nil || p.Count() != 16385 {
 			t.Fatalf("store read disagrees with selected config: count=%d err=%v", p.Count(), err)
 		}
 	}
 	p, err := readConfig(target)
-	if err != nil || p.Count() != 1 {
+	if err != nil || p.Count() != 16385 {
 		t.Fatalf("ignored authoritative saved selection: count=%d err=%v", p.Count(), err)
 	}
 	for _, dir := range []string{primary.Coordinator.Dir, other.Coordinator.Dir, ignoredTarget} {

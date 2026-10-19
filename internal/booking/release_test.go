@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/config"
-	"portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 )
 
 func seedRelease(t *testing.T, s Store, r Registry) string {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"portbook/internal/ports"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 type Store struct {
@@ -53,11 +53,20 @@ func (s Store) directory() (string, error) {
 	return selection.Directory, err
 }
 
+// defaultPool is applied only when config.json is absent. An explicit empty
+// document intentionally disables new allocations. Every call returns a value
+// copy, so mutations cannot change the process-wide default.
+func defaultPool() ports.Pool {
+	var p ports.Pool
+	p.Apply([]ports.Range{{Start: 49152, End: 65535}}, true)
+	return p
+}
+
 func readConfig(dir string) (ports.Pool, error) {
 	path := filepath.Join(dir, "config.json")
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return ports.Pool{}, nil
+		return defaultPool(), nil
 	}
 	if err != nil {
 		return ports.Pool{}, fmt.Errorf("inspect config: %w", err)

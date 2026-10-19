@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 )
 
 func listEntries(t *testing.T, raw string) []booking.Entry {
@@ -134,7 +134,7 @@ func TestListCLIConcurrentAtomicSnapshots(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "isolated")
 	root := registryRoot(t, home)
 	ports, held := candidateSockets(t, 8)
-	args := []string{"config", "ranges", "add"}
+	args := []string{"config", "add"}
 	for _, p := range ports {
 		held[p].Close()
 		args = append(args, fmt.Sprint(p))
@@ -195,7 +195,7 @@ func TestListCLIConcurrentAtomicSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	locationRun(t, home, 0, "config", "ranges", "remove", "--all")
+	locationRun(t, home, 0, "config", "remove", "--all")
 	if got := listEntries(t, locationRun(t, home, 0, "list", "--all")); !reflect.DeepEqual(got, entries) {
 		t.Fatal(got)
 	}

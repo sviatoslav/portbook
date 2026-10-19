@@ -1,0 +1,32 @@
+version: 2
+project_name: portbook
+builds:
+  - id: portbook
+    main: ./cmd/portbook
+    binary: portbook
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/sviatoslav/portbook/internal/buildinfo.Version={{ .Version }} -X github.com/sviatoslav/portbook/internal/buildinfo.Commit={{ .FullCommit }}
+archives:
+  - id: portbook
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - docs/RELEASING.md
+      - LICENSE
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+snapshot:
+  version_template: "{{ .Version }}-snapshot-{{ .ShortCommit }}"
+release:
+  github:
+    owner: sviatoslav
+    name: portbook
+changelog:
+  disable: true
