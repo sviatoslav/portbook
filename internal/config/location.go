@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -104,7 +103,7 @@ func (l Location) ValidateSelection(dir string) error {
 		}
 		if sameRoot {
 			// Reserve case aliases consistently across macOS and Linux filesystems.
-			if strings.EqualFold(child, LocationFile) || strings.EqualFold(child, "state.lock") {
+			if strings.EqualFold(child, LocationFile) || strings.EqualFold(child, "state.lock") || strings.EqualFold(child, "bookings.json") {
 				return fmt.Errorf("config directory conflicts with reserved bootstrap file %q", child)
 			}
 			return nil
@@ -170,7 +169,7 @@ func (l Location) readSaved() (string, error) {
 	if err := dec.Decode(new(any)); err != io.EOF {
 		return "", errors.New("invalid saved config location: trailing JSON data")
 	}
-	if err := validatePointerUnicode(data); err != nil {
+	if err := state.ValidateJSONUnicode(data); err != nil {
 		return "", fmt.Errorf("invalid saved config location: %w", err)
 	}
 	if doc.Version != 1 {
@@ -227,7 +226,7 @@ func (l Location) Change(ctx context.Context, dir string) (effective Selection, 
 			if err != nil {
 				return err
 			}
-			if err := atomicWrite(l.Coordinator.Dir, LocationFile, append(data, '\n')); err != nil {
+			if err := state.AtomicWrite(l.Coordinator.Dir, LocationFile, append(data, '\n')); err != nil {
 				return err
 			}
 		} else {
@@ -254,45 +253,4 @@ func (l Location) Change(ctx context.Context, dir string) (effective Selection, 
 		return nil
 	})
 	return effective, err
-}
-
-// encoding/json repairs invalid UTF-8 and unpaired surrogate escapes. A path
-// pointer must reject those inputs instead of silently selecting another path.
-// Call after JSON syntax validation; escaped backslashes remain literal text.
-func validatePointerUnicode(data []byte) error {
-	invalid := errors.New("text must be valid Unicode without unpaired surrogate escapes")
-	if !utf8.Valid(data) {
-		return invalid
-	}
-	for i := 0; i < len(data); i++ {
-		if data[i] != '\\' {
-			continue
-		}
-		i++
-		if i >= len(data) || data[i] != 'u' {
-			continue
-		}
-		if i+4 >= len(data) {
-			return invalid
-		}
-		code, err := strconv.ParseUint(string(data[i+1:i+5]), 16, 16)
-		if err != nil {
-			return invalid
-		}
-		i += 4
-		switch {
-		case code >= 0xd800 && code <= 0xdbff:
-			if i+6 >= len(data) || data[i+1] != '\\' || data[i+2] != 'u' {
-				return invalid
-			}
-			low, err := strconv.ParseUint(string(data[i+3:i+7]), 16, 16)
-			if err != nil || low < 0xdc00 || low > 0xdfff {
-				return invalid
-			}
-			i += 6
-		case code >= 0xdc00 && code <= 0xdfff:
-			return invalid
-		}
-	}
-	return nil
 }

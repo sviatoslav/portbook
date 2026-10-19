@@ -104,11 +104,13 @@ func configLocationForTest() (string, error) {
 }
 
 func TestDiagnosticConfigDirEndBoundary(t *testing.T) {
+	var helpErr error
+	root := newCommandTree(&options{}, &bytes.Buffer{}, &helpErr)
 	for _, args := range [][]string{
 		{"--config-dir", "--", "--output=table"},
 		{"--config-dir", "--", "--output", "table"},
 	} {
-		if got := diagnosticOutput(args, "json"); got != "json" {
+		if got := diagnosticOutput(args, "json", root); got != "json" {
 			t.Fatalf("%v: %s", args, got)
 		}
 	}

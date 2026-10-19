@@ -21,6 +21,13 @@ func TestDiagnosticOutputOnUsageFailure(t *testing.T) {
 				want string // Empty means the terminal-dependent default.
 			}{
 				{[]string{"config", "show", "--bogus"}, ""},
+				{[]string{"reserve", "--directory", "--output=table", "--output=json"}, "json"},
+				{[]string{"reserve", "--directory", "--output=json", "--output=table"}, "table"},
+				{[]string{"reserve", "--bogus", "--directory", "--output=table", "--output=json"}, "json"},
+				{[]string{"reserve", "--directory", "--output=json"}, ""},
+				{[]string{"reserve", "--directory", "--", "--output=table"}, ""},
+				{[]string{"reserve", "--directory=--output=table", "--output=json", "--help"}, "json"},
+				{[]string{"config", "show", "--directory", "--output=table", "--output=json"}, "table"},
 				{[]string{"--output", "json", "config", "show", "--bogus"}, "json"},
 				{[]string{"config", "show", "--bogus", "--output", "json"}, "json"},
 				{[]string{"--output=table", "config", "show", "--bogus"}, "table"},

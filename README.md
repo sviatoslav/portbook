@@ -1,10 +1,11 @@
 # Portbook
 
 Portbook is a standalone Go CLI for cooperating coding agents on one machine.
-This first feature configures the set of allowed TCP ports. The pool starts empty.
+It configures an allowed TCP port pool and reserves ports for directory/service pairs.
+The pool starts empty.
 
-Only configuration commands are implemented. Booking, release, owner detection,
-OS availability checks, cleanup, and agent skills are future work. There is no
+Configuration and single-service reservation are implemented. Listing, release,
+cleanup, batch reservations, and agent skills are future work. There is no
 daemon, proxy, database, heartbeat, or expiry mechanism.
 
 ## Build and install
@@ -28,6 +29,7 @@ local verification in this checkout was performed on macOS. Windows is untested.
 ## Commands
 
 ```sh
+portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
 portbook config path get
 portbook config path set /absolute/path
 portbook config path reset
@@ -51,8 +53,8 @@ removals subtract ports, even across gaps or within a previously added range.
 Overlaps are accepted. Counts report actual changes, so adding present ports or
 removing absent ports succeeds with zero changes. Stored and displayed ranges
 are sorted, disjoint, and merge adjacent intervals. Single ports display as one
-number. Configuration changes do not touch other state files; future booking
-data will be separate, including bookings outside the configured pool.
+number. Configuration changes do not touch other state files; booking
+data stays separate, including bookings outside the configured pool.
 
 An illustrative sequence on a fresh pool, using explicit table output so it is
 reproducible when captured:
@@ -84,10 +86,81 @@ No port ranges configured.
 Total: 0 ports.
 ```
 
+## Reserving a port
+
+```text
+$ portbook reserve server --directory /projects/my-app
+50000
+$ portbook reserve server --directory /projects/my-app
+50000
+$ portbook reserve --directory /projects/my-app
+50001
+```
+
+These ports are illustrative: a new booking uses the lowest available configured
+port. `reserve` accepts at most one service. Omitting it selects the literal
+`default`, so `reserve` and `reserve default` reuse the same booking.
+Service identities are nonempty, case-sensitive Unicode strings without NUL;
+use `--` before a service beginning with a hyphen.
+
+The owner defaults to the absolute current working directory, including nested
+directories. Portbook never searches for a Git/worktree root or changes cwd.
+`--directory` must be a nonempty absolute path to an existing, readable and
+searchable directory. Paths are normalized and existing symlink aliases resolve
+to the same physical directory. Existing bookings also match filesystem case
+aliases without folding distinct directory or service names. Missing, inaccessible,
+or file targets fail;
+Portbook never creates the owner directory or silently falls back to cwd.
+
+An existing directory/service booking returns its saved port, even if an OS
+listener occupies it, the configured pool is empty, or that port has been removed
+from the pool. Reuse does not claim a listener belongs to Portbook or its caller.
+New reservations skip every port booked by any directory/service, including idle
+bookings, and every candidate that cannot be bound. Probes briefly bind wildcard
+IPv4 and IPv6 TCP sockets (where the family is supported), then close them.
+Forbidden candidates are skipped; unexpected probe failures stop the command
+conservatively. Exhaustion fails without changing bookings.
+
+Sockets are not held after probing. An unmanaged process can bind a port between
+the probe and your application's listen call; reservations coordinate cooperating
+Portbook callers and cannot prevent this OS race. Portbook never automatically
+switches, expires, or reclaims a booking. There is currently no release command.
+
+Bookings live in `bookings.json` beside `state.lock` in the fixed OS-standard
+Portbook directory: `~/Library/Application Support/portbook/bookings.json` on
+macOS, `$XDG_CONFIG_HOME/portbook/bookings.json` on Linux, or
+`~/.config/portbook/bookings.json` when XDG_CONFIG_HOME is unset. Overrides and
+saved config locations never move this global registry. The format is:
+
+```json
+{"version":1,"bookings":{"/projects/my-app":{"server":50000,"default":50001},"/projects/another-app":{"server":50002}}}
+```
+
+Missing registry means empty. Every port is globally unique; every directory key
+must be a normalized absolute path. Decoding preserves valid Unicode exactly and
+rejects malformed JSON, duplicate keys, unknown fields, unsupported versions,
+invalid identities/ports, duplicate port assignments, invalid Unicode, and
+nonregular (including symlink) or inaccessible registry files. Errors preserve
+the original evidence on repeated commands. Recorded directories may subsequently
+disappear; decoding retains their bookings. Reservation still requires a valid
+current owner directory. Do not reset the registry to resolve corruption.
+
+Reservation holds the existing global lock once across registry read, selected
+configuration resolution/read, reuse or probing, and atomic registry save. It
+never writes the config or saved pointer. Config updates and path switching use
+the same lock. Success is emitted only after saving. Atomic replacement uses the
+same temporary-file, file-sync, rename, and directory-sync protocol as config.
+As with config, a directory-sync error after rename reports failure after a
+committed replacement. Inspect the registry before retrying.
+
 ## Output and exit codes
 
-When stdout is a terminal, output is human-readable text/tables. When stdout is
-piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
+`reserve` success always writes only a decimal port plus newline, on terminals
+and pipes and even with `--output json` or `--output table`. Its help and errors
+follow the normal format rules below.
+
+For configuration commands, terminal stdout is human-readable text/tables.
+When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
 `--output json` overrides this anywhere in the command; `--output=json` also
 works. `--help` / `-h` describes commands and examples and follows this convention
 (JSON help has `command` and `help` fields). Help is scoped to the resolved
@@ -95,16 +168,17 @@ command: `portbook config ranges remove --help` describes removal and `--all`.
 Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
 and `--all` mixed with operands still fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
-can appear before or after the command path; `--all` belongs to `ranges remove`.
-Repeated `--output`, `--config-dir`, or `--all` flags are rejected. `--` ends flag parsing, so
+can appear before or after the command path; `--all` belongs to `ranges remove`
+and `--directory` belongs to `reserve`.
+Repeated `--output`, `--config-dir`, `--directory`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config ranges add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
 
 The output override also applies to diagnostics when an earlier flag is invalid.
 For malformed or repeated output options, diagnostics use the first selection
 before `--` if its value is `table` or `json`; otherwise they use the terminal
-default. Malformed/repeated selections still fail with exit 2. Tokens after
-`--` never select an output format.
+default. Malformed/repeated selections still fail with exit 2. Tokens consumed as values for `--config-dir` or `--directory`, and tokens after
+`--`, never select an output format.
 
 Each success is written to stdout, with an empty stderr. Each failure writes a
 diagnostic to stderr. Stable JSON schemas:
@@ -160,7 +234,7 @@ be directories; the destination need not exist. Paths are cleaned but symlinks
 in directory components are not resolved to a canonical physical path. A higher
 priority selection bypasses lower priority choices, including invalid environment
 values or a corrupt/unreadable saved pointer. The fixed OS-standard directory is
-still required for mutation coordination. Its `location.json` and `state.lock`
+still required for mutation coordination. Its `location.json`, `bookings.json`, and `state.lock`
 paths (including children and case aliases) are reserved and cannot serve as
 config directories. Existing directory-symlink aliases of that root are checked
 as well. Such bootstrap conflicts report a storage error.
@@ -188,7 +262,7 @@ files. Selecting an uninitialized directory means an empty allowed pool. Returni
 to an earlier directory restores access to its unchanged configuration.
 
 The saved choice lives in `location.json` in the **fixed OS-standard Portbook
-directory**, alongside `state.lock`, even when configuration is relocated:
+directory**, alongside `state.lock` and `bookings.json`, even when configuration is relocated:
 
 ```json
 {"version":1,"directory":"/absolute/path"}
@@ -230,22 +304,21 @@ errors explicitly before retrying; the original config remains available.
 
 Every mutation holds the same OS-backed `state.lock` in the fixed OS-standard
 Portbook directory across read, modification, and save, using [gofrs/flock](https://github.com/gofrs/flock).
-Lock acquisition waits at most five seconds. Future booking mutations must use
+Lock acquisition waits at most five seconds. Reservations use
 this same lock. Changing config directory never relocates or splits coordination
-or future registry data. Range mutations resolve the saved selection inside the
+or registry data. Range mutations resolve the saved selection inside the
 lock, so a concurrent path change and range update have a defined serial order.
 Path set/reset update the fixed pointer under that same lock, without nesting.
 The lock file stays in place: do not delete or replace it while
 processes may be running. The OS releases a held lock when its process exits.
 
 Saves use a private temporary file in the same directory, sync it, then atomically
-rename it over `config.json` (or `location.json` for a saved choice) and sync the
+rename it over `config.json`, `location.json`, or `bookings.json` and sync the
 directory. Reset also syncs the directory after removing the pointer. New
-directories use mode 0700 and config/pointer files use 0600. Readers see a complete
-snapshot without taking
-the mutation lock. A directory-sync failure after rename returns an error but
-the replacement has already committed; inspect the config or saved choice before
-retrying. A reset directory-sync failure likewise follows committed removal.
+directories use mode 0700 and config/pointer/booking files use 0600. Configuration
+readers see a complete snapshot without taking the mutation lock. A directory-sync failure after rename returns an error but
+the replacement has already committed; inspect the config, saved choice, or
+registry before retrying. A reset directory-sync failure likewise follows committed removal.
 These guarantees assume a local filesystem supporting OS locks and atomic
 rename, and cooperating writers using this lock. Do not manually edit files
 while mutations are running.
@@ -259,7 +332,7 @@ go vet ./...
 ```
 
 The integration suite builds the real executable and exercises independent
-processes, including concurrent additions, removals, and location switches. Tests use isolated
+processes, including concurrent additions, removals, location switches, and reservations. Tests use isolated
 temporary directories and never write to the normal user configuration.
 
 The command tree uses [Cobra](https://cobra.dev/docs/how-to-guides/working-with-flags/)
@@ -281,7 +354,8 @@ Code responsibilities:
 | `internal/config/codec.go` | Versioned JSON encoding and fail-closed decoding |
 | `internal/config/store.go` | Read and atomic config/pointer persistence |
 | `internal/config/location.go` | Config selection and fixed bootstrap pointer |
-| `internal/state` | Fixed OS-standard coordination directory and OS lock |
+| `internal/booking` | Canonical owner identity, strict nested registry, TCP probes, reservation |
+| `internal/state` | Fixed OS-standard coordination directory, OS lock, atomic writes, Unicode validation |
 
 `state.Coordinator.WithLock(ctx, func() error)` owns only the shared lock. Its
 callback may fail; the lock is released on return or panic, and the OS releases

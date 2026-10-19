@@ -1,0 +1,121 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"portbook/internal/config"
+	"portbook/internal/state"
+)
+
+type failedWriter struct{}
+
+func (failedWriter) Write([]byte) (int, error) { return 0, errors.New("stdout closed") }
+func TestReservePlainOutputAndCommittedOutputFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
+	c, err := state.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(c.Dir, 0700)
+	owner := t.TempDir()
+	physical, err := filepath.EvalSymlinks(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Seed a valid booking to isolate output from availability and terminal state.
+	data := []byte(fmt.Sprintf(`{"version":1,"bookings":{%q:{"default":54321}}}`, physical))
+	path := filepath.Join(c.Dir, "bookings.json")
+	os.WriteFile(path, data, 0600)
+	for _, terminal := range []bool{true, false} {
+		for _, format := range []string{"", "json", "table"} {
+			args := []string{"reserve", "--directory", owner}
+			if format != "" {
+				args = append(args, "--output", format)
+			}
+			var out, diag bytes.Buffer
+			if code := Run(context.Background(), args, &out, &diag, terminal); code != 0 || out.String() != "54321\n" || diag.Len() != 0 {
+				t.Fatal(code, out.String(), diag.String())
+			}
+		}
+	}
+	var diag bytes.Buffer
+	if code := Run(context.Background(), []string{"reserve", "--directory", owner}, failedWriter{}, &diag, false); code != 1 {
+		t.Fatal(code, diag.String())
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(data, after) {
+		t.Fatal("stdout failure removed booking", err)
+	}
+	// A pre-existing booking is preserved even when the configured pool is empty.
+	s, err := config.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, err := s.Read()
+	if err != nil || pool.Count() != 0 {
+		t.Fatal(err)
+	}
+}
+
+func TestReserveNewBookingSurvivesOutputFailure(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	var out, diag bytes.Buffer
+	if code := Run(context.Background(), []string{"config", "ranges", "add", fmt.Sprint(port)}, &out, &diag, false); code != 0 {
+		t.Fatal(code, diag.String())
+	}
+	owner := t.TempDir()
+	args := []string{"reserve", "--directory", owner}
+	diag.Reset()
+	if code := Run(context.Background(), args, failedWriter{}, &diag, false); code != 1 || !strings.Contains(diag.String(), `"code":"runtime_error"`) {
+		t.Fatal(code, diag.String())
+	}
+	out.Reset()
+	diag.Reset()
+	if code := Run(context.Background(), args, &out, &diag, false); code != 0 || out.String() != fmt.Sprint(port)+"\n" {
+		t.Fatal(code, out.String(), diag.String())
+	}
+}
+
+func TestReserveDiagnosticFormats(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
+	for _, terminal := range []bool{false, true} {
+		for _, tc := range []struct {
+			args []string
+			json bool
+		}{
+			{[]string{"reserve", "a", "b"}, !terminal},
+			{[]string{"reserve", "--directory=relative", "--output=table"}, false},
+			{[]string{"reserve", "--directory=relative", "--output=json"}, true},
+			{[]string{"reserve", "--bogus", "--output=table", "--output=json"}, false},
+			{[]string{"reserve", "a", "--", "--output=json"}, !terminal},
+		} {
+			var out, diag bytes.Buffer
+			if code := Run(context.Background(), tc.args, &out, &diag, terminal); code != 2 || out.Len() != 0 {
+				t.Fatal(code, out.String(), diag.String())
+			}
+			if strings.HasPrefix(diag.String(), "{") != tc.json {
+				t.Fatal(tc.args, diag.String())
+			}
+		}
+	}
+}
