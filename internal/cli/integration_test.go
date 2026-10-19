@@ -79,26 +79,27 @@ func run(t *testing.T, dir string, wantCode int, args ...string) string {
 
 func TestAgreedSequence(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
+	run(t, dir, 0, "config", "remove", "--all")
 	for _, s := range []struct {
 		args []string
 		want string
 	}{
 		{[]string{"config", "show"}, "No port ranges configured.\nTotal: 0 ports.\n"},
-		{[]string{"config", "ranges", "add", "50000-50099"}, "Added 100 ports. Total: 100 ports.\n"},
-		{[]string{"config", "ranges", "add", "50050-50149"}, "Added 50 ports. Total: 150 ports.\n"},
+		{[]string{"config", "add", "50000-50099"}, "Added 100 ports. Total: 100 ports.\n"},
+		{[]string{"config", "add", "50050-50149"}, "Added 50 ports. Total: 150 ports.\n"},
 		{[]string{"config", "show"}, "RANGE PORTS 50000-50149 150 Total: 150 ports."},
-		{[]string{"config", "ranges", "remove", "50040-50059"}, "Removed 20 ports. Total: 130 ports.\n"},
+		{[]string{"config", "remove", "50040-50059"}, "Removed 20 ports. Total: 130 ports.\n"},
 		{[]string{"config", "show"}, "RANGE PORTS 50000-50039 40 50060-50149 90 Total: 130 ports."},
-		{[]string{"config", "ranges", "remove", "50149"}, "Removed 1 port. Total: 129 ports.\n"},
-		{[]string{"config", "ranges", "add", "50000"}, "Added 0 ports. Total: 129 ports.\n"},
-		{[]string{"config", "ranges", "remove", "--all"}, "Removed 129 ports. Total: 0 ports.\n"},
+		{[]string{"config", "remove", "50149"}, "Removed 1 port. Total: 129 ports.\n"},
+		{[]string{"config", "add", "50000"}, "Added 0 ports. Total: 129 ports.\n"},
+		{[]string{"config", "remove", "--all"}, "Removed 129 ports. Total: 0 ports.\n"},
 	} {
 		got := run(t, dir, 0, append([]string{"--output", "table"}, s.args...)...)
 		if strings.Join(strings.Fields(got), " ") != strings.Join(strings.Fields(s.want), " ") {
 			t.Fatalf("%v: %q != %q", s.args, got, s.want)
 		}
 	}
-	run(t, dir, 0, "config", "ranges", "add", "51000")
+	run(t, dir, 0, "config", "add", "51000")
 	if got := run(t, dir, 0, "--output=table", "config", "show"); !strings.Contains(got, "Total: 1 port.") {
 		t.Fatal(got)
 	}
@@ -113,7 +114,8 @@ func TestAgreedSequence(t *testing.T) {
 
 func TestJSONAndInvalidInputsNoMutation(t *testing.T) {
 	dir := t.TempDir()
-	if got := run(t, dir, 0, "config", "ranges", "add", "1", "65535"); got != "{\"command\":\"config ranges add\",\"changed\":2,\"total\":2}\n" {
+	run(t, dir, 0, "config", "remove", "--all")
+	if got := run(t, dir, 0, "config", "add", "1", "65535"); got != "{\"command\":\"config add\",\"changed\":2,\"total\":2}\n" {
 		t.Fatal(got)
 	}
 	before, err := os.ReadFile(filepath.Join(dir, "config.json"))
@@ -121,15 +123,15 @@ func TestJSONAndInvalidInputsNoMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"config", "ranges", "add", "2", "bad"},
-		{"config", "ranges", "add", "0"},
-		{"config", "ranges", "add", "65536"},
-		{"config", "ranges", "remove", "10-1"},
-		{"config", "ranges", "remove", "--all", "1"},
-		{"config", "ranges", "remove", "1", "--all"},
-		{"config", "ranges", "remove", "--all", "--all"},
-		{"config", "ranges", "add", "--all"},
-		{"config", "ranges", "remove"},
+		{"config", "add", "2", "bad"},
+		{"config", "add", "0"},
+		{"config", "add", "65536"},
+		{"config", "remove", "10-1"},
+		{"config", "remove", "--all", "1"},
+		{"config", "remove", "1", "--all"},
+		{"config", "remove", "--all", "--all"},
+		{"config", "add", "--all"},
+		{"config", "remove"},
 	} {
 		got := run(t, dir, 2, args...)
 		var diagnostic struct {
@@ -165,7 +167,7 @@ func TestCorruptConfigPreservedAcrossProcesses(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := 0; i < 2; i++ {
-				for _, args := range [][]string{{"config", "show"}, {"config", "ranges", "add", "50000"}, {"config", "ranges", "remove", "--all"}} {
+				for _, args := range [][]string{{"config", "show"}, {"config", "add", "50000"}, {"config", "remove", "--all"}} {
 					if got := run(t, dir, 1, args...); !strings.Contains(got, `"code":"storage_error"`) {
 						t.Fatal(got)
 					}
@@ -181,6 +183,7 @@ func TestCorruptConfigPreservedAcrossProcesses(t *testing.T) {
 
 func TestIndependentConcurrentProcesses(t *testing.T) {
 	dir := t.TempDir()
+	run(t, dir, 0, "config", "remove", "--all")
 	const workers = 24
 	runBatch := func(remove bool) {
 		cmds := make([]*exec.Cmd, workers)
@@ -193,7 +196,7 @@ func TestIndependentConcurrentProcesses(t *testing.T) {
 				action = "remove"
 				operands = []string{fmt.Sprint(51000 + i)}
 			}
-			cmds[i] = command(dir, append([]string{"config", "ranges", action}, operands...)...)
+			cmds[i] = command(dir, append([]string{"config", action}, operands...)...)
 			cmds[i].Stdout = &outs[i]
 			cmds[i].Stderr = &diags[i]
 			if err := cmds[i].Start(); err != nil {
@@ -246,7 +249,31 @@ func TestStoragePathFailure(t *testing.T) {
 	if err := os.WriteFile(path, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if got := run(t, path, 1, "config", "ranges", "add", "1"); !strings.Contains(got, `"code":"storage_error"`) {
+	if got := run(t, path, 1, "config", "add", "1"); !strings.Contains(got, `"code":"storage_error"`) {
 		t.Fatal(got)
+	}
+}
+
+func TestDefaultPoolReadOnlyAndFirstConfigMutations(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing-config")
+	got := run(t, dir, 0, "config", "show")
+	if got != "{\"command\":\"config show\",\"ranges\":[{\"start\":49152,\"end\":65535}],\"total\":16384}\n" {
+		t.Fatal(got)
+	}
+	run(t, dir, 0, "config", "path", "get")
+	for _, path := range []string{dir, dir + "-home", dir + "-xdg"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatal("default read wrote state", path, err)
+		}
+	}
+	if got := run(t, dir, 0, "config", "add", "49150-49153"); got != "{\"command\":\"config add\",\"changed\":2,\"total\":16386}\n" {
+		t.Fatal(got)
+	}
+	if got := run(t, dir, 0, "config", "remove", "49150-49153"); got != "{\"command\":\"config remove\",\"changed\":4,\"total\":16382}\n" {
+		t.Fatal(got)
+	}
+	run(t, dir, 0, "config", "remove", "--all")
+	if got := run(t, dir, 0, "config", "show"); got != "{\"command\":\"config show\",\"ranges\":[],\"total\":0}\n" {
+		t.Fatal("empty config fell back", got)
 	}
 }

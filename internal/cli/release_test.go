@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"portbook/internal/booking"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func TestReleaseOutputDefaultsAndWriteErrors(t *testing.T) {

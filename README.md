@@ -1,31 +1,141 @@
 # Portbook
 
-Portbook is a standalone Go CLI for cooperating coding agents on one machine.
-It configures an allowed TCP port pool and reserves ports for directory/service pairs.
-The pool starts empty.
+Portbook gives your projects and coding agents stable local TCP ports.
 
-Configuration, single-service reservation, read-only listing, conservative
-single-booking release, and explicit cleanup are implemented. Batch reservations
-and agent skills are future work. There is no
-daemon, proxy, database, heartbeat, or expiry mechanism.
+## Ports, ready to use
 
-## Build and install
+Ask for a port from your project directory:
 
-Requires Go 1.26 or newer. From this checkout:
+```sh
+portbook reserve                  # 49152
+portbook reserve api              # 49153
+portbook reserve api              # 49153 again
+portbook list                     # see this project's bookings
+portbook release api              # release it after stopping your server
+```
+
+Works out of the box with 16,384 candidate ports (49152–65535). Busy or already
+booked ports are skipped. Numbers above are illustrative; new reservations use
+the lowest available allowed port. Customize the pool only if needed.
+
+A booking belongs to your current directory and service name (`default`
+when omitted); asking again reuses the same port. Projects share one registry,
+so they avoid each other's booked ports. Run from another directory for another
+project, or use `--directory /absolute/project/path`.
+
+`reserve` prints just the port, ready for a script or coding agent:
+
+```sh
+PORT=$(portbook reserve api)
+```
+
+Start with [installation](#installation): source builds work from an accessible
+checkout today; downloadable binaries are planned for the first release.
+
+Portbook also provides conservative `cleanup` for abandoned bookings. It runs
+without a daemon, proxy, database, heartbeat, or expiry. Batch reservations and
+agent skills are future work.
+
+## Installation
+
+The first release, `v0.1.0`, is being prepared. The repository is currently private;
+access is required to clone it or download private release assets. No public
+release assets or tags are promised by the examples below. Public availability
+and a project license remain owner decisions; this checkout has no license file.
+
+### Download a release (after the first release)
+
+Standalone executables require no Go installation. Planned archive names are:
+
+| System | CPU (`uname -m`) | Archive suffix |
+| --- | --- | --- |
+| macOS | Apple Silicon (`arm64`) | `darwin_arm64.tar.gz` |
+| macOS | Intel (`x86_64`) | `darwin_amd64.tar.gz` |
+| Linux | ARM64 (`aarch64`/`arm64`) | `linux_arm64.tar.gz` |
+| Linux | x86-64 (`x86_64`) | `linux_amd64.tar.gz` |
+
+These four targets are cross-built with CGO disabled. CI is configured to run
+extracted native artifacts on each target; a successful cross-build alone does
+not prove runtime support. Windows and other platforms are outside this release
+scope. macOS binaries are unsigned and not notarized; downloaded files may be
+subject to macOS security checks.
+
+After a release exists, open the
+[GitHub Releases page](https://github.com/sviatoslav/portbook/releases), select a
+specific version, and download its matching archive and `checksums.txt` into a
+new temporary download directory. Private assets require signing in with repository
+access; public unauthenticated downloads work only after a public release exists.
+
+The following is an example **after** `v0.1.0` is published, for macOS arm64.
+Replace the version and archive suffix using the table. Run these commands from
+the directory containing the two downloads. Stop if checksum verification fails:
+
+```sh
+archive=portbook_0.1.0_darwin_arm64.tar.gz
+# Select the exact downloaded archive's SHA256 entry.
+awk -v name="$archive" '$2 == name { print }' checksums.txt > selected-checksum.txt
+test "$(wc -l < selected-checksum.txt | tr -d ' ')" = 1 &&
+  shasum -a 256 --check selected-checksum.txt &&
+  tar -xzf "$archive" &&
+  mkdir -p "$HOME/.local/bin" &&
+  install -m 755 portbook "$HOME/.local/bin/portbook"
+```
+
+On Linux, `sha256sum --check selected-checksum.txt` may replace `shasum`.
+Checksums detect corruption; they do not authenticate a compromised download
+source. Obtain both files from the intended GitHub release.
+
+Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if needed,
+open a new shell, then run `portbook --version` and `portbook --help`.
+No `sudo` is required. Release builds print the release version and Git commit;
+checkout and plain `go install` builds print `portbook dev (commit unknown)`.
+Version output is one plain-text line even with `--output json`; it reads no
+configuration or booking data. Other command output contracts are unchanged.
+
+### Build or install from source
+
+Requires Go 1.26 or newer and macOS or Linux. From an accessible checkout:
 
 ```sh
 go build -o bin/portbook ./cmd/portbook
+./bin/portbook --version
 ./bin/portbook --output table --help
-```
-
-To install into your Go binary directory (`GOBIN`, or `$(go env GOPATH)/bin`):
-
-```sh
 go install ./cmd/portbook
 ```
 
-macOS and Linux are the target platforms. The CI workflow runs the tests on both;
-local verification in this checkout was performed on macOS. Windows is untested.
+`go install` writes to `GOBIN`, or `$(go env GOPATH)/bin` when GOBIN is unset.
+Add that directory to PATH. After a public version tag exists, an example tagged
+source install is:
+
+```sh
+# Future example; v0.1.0 is not an existing release in this preparation slice.
+go install github.com/sviatoslav/portbook/cmd/portbook@v0.1.0
+```
+
+The module path is prepared for this command; remote tagged installation cannot
+be verified until an accessible tag is published. Private source installation
+requires your own Git authentication and private Go module configuration.
+
+### Update or uninstall
+
+To update a downloaded binary, download a chosen newer version, verify its
+checksum, and repeat the install command into the same PATH directory. For a
+source install, repeat your source installation procedure at the desired version.
+Use `command -v portbook` and `portbook --version` to check which binary runs.
+
+To uninstall the downloaded binary:
+
+```sh
+rm "$HOME/.local/bin/portbook"
+```
+
+For a Go installation, remove the binary from your GOBIN/Go binary directory.
+Uninstalling removes only the executable. Config, the saved config selection,
+and bookings remain in the locations documented below; no automatic data
+cleanup or migration occurs.
+
+Maintainers: see [release preparation and publication](docs/RELEASING.md) for
+local snapshot checks, CI gates, and future intentional tag steps.
 
 ## Commands
 
@@ -39,11 +149,11 @@ portbook config path set /absolute/path
 portbook config path reset
 portbook --config-dir /temporary/path config show
 portbook config show
-portbook config ranges add 50000-50499
-portbook config ranges add 51000
-portbook config ranges remove 50000-50499
-portbook config ranges remove 51000
-portbook config ranges remove --all
+portbook config add 50000-50499
+portbook config add 51000
+portbook config remove 50000-50499
+portbook config remove 51000
+portbook config remove --all
 ```
 
 `add` and `remove` accept one or more ports or inclusive `START-END` ranges.
@@ -60,30 +170,33 @@ are sorted, disjoint, and merge adjacent intervals. Single ports display as one
 number. Configuration changes do not touch other state files; booking
 data stays separate, including bookings outside the configured pool.
 
-An illustrative sequence on a fresh pool, using explicit table output so it is
-reproducible when captured:
+An illustrative sequence on a fresh installation, starting by explicitly clearing
+the effective default pool,
+using table output so it is reproducible when captured:
 
 ```text
-$ portbook --output table config ranges add 50000-50099
+$ portbook --output table config remove --all
+Removed 16384 ports. Total: 0 ports.
+$ portbook --output table config add 50000-50099
 Added 100 ports. Total: 100 ports.
-$ portbook --output table config ranges add 50050-50149
+$ portbook --output table config add 50050-50149
 Added 50 ports. Total: 150 ports.
 $ portbook --output table config show
 RANGE        PORTS
 50000-50149  150
 Total: 150 ports.
-$ portbook --output table config ranges remove 50040-50059
+$ portbook --output table config remove 50040-50059
 Removed 20 ports. Total: 130 ports.
 $ portbook --output table config show
 RANGE        PORTS
 50000-50039  40
 50060-50149  90
 Total: 130 ports.
-$ portbook --output table config ranges remove 50149
+$ portbook --output table config remove 50149
 Removed 1 port. Total: 129 ports.
-$ portbook --output table config ranges add 50000
+$ portbook --output table config add 50000
 Added 0 ports. Total: 129 ports.
-$ portbook --output table config ranges remove --all
+$ portbook --output table config remove --all
 Removed 129 ports. Total: 0 ports.
 $ portbook --output table config show
 No port ranges configured.
@@ -305,16 +418,16 @@ When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--ou
 `--output json` overrides this anywhere in the command; `--output=json` also
 works. `--help` / `-h` describes commands and examples and follows this convention
 (JSON help has `command` and `help` fields). Help is scoped to the resolved
-command: `portbook config ranges remove --help` describes removal and `--all`.
+command: `portbook config remove --help` describes removal and `--all`.
 Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
-`ranges remove --all` mixed with operands, and `list --all --directory` still
+`config remove --all` mixed with operands, and `list --all --directory` still
 fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
-can appear before or after the command path; `--all` belongs to `ranges remove`
+can appear before or after the command path; `--all` belongs to `config remove`
 and `list`; `--directory` belongs to `reserve`, `list`, and `release`; and
 `--dry-run` belongs to `cleanup`.
 Repeated `--output`, `--config-dir`, `--directory`, `--dry-run`, or `--all` flags are rejected. `--` ends flag parsing, so
-`config ranges add -- 51000` works and `--help` after `--` is an operand.
+`config add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
 
 The output override also applies to diagnostics when an earlier flag is invalid.
@@ -335,11 +448,11 @@ diagnostic to stderr. Stable JSON schemas:
 ```
 
 ```json
-{"command":"config ranges add","changed":100,"total":100}
+{"command":"config add","changed":100,"total":100}
 ```
 
 ```json
-{"command":"config ranges remove","changed":0,"total":100}
+{"command":"config remove","changed":0,"total":100}
 ```
 
 ```json
@@ -353,7 +466,7 @@ with OS errors. Exit codes are 0 for success, 1 for runtime/storage failures,
 and 2 for invalid commands, flags, or operands. If output fails after saving,
 the mutation may already be committed even though the process returns 1.
 
-## Configuration and locking
+## Advanced configuration and locking
 
 The versioned JSON config is `config.json` in Go's standard per-user OS config
 directory, under `portbook`:
@@ -401,7 +514,7 @@ Set/reset use the same effective fields plus `saved_directory`, a string for set
 and `null` for reset. Repeating set or reset is successful. Reset removes only
 the saved choice; environment and flag overrides remain active. These commands
 select configuration; they never copy, move, merge, clear, or delete configuration
-files. Selecting an uninitialized directory means an empty allowed pool. Returning
+files. Selecting an uninitialized directory uses the same default pool. Returning
 to an earlier directory restores access to its unchanged configuration.
 
 The saved choice lives in `location.json` in the **fixed OS-standard Portbook
@@ -424,7 +537,8 @@ For an isolated configuration selection (coordination still uses the fixed root)
 
 ```sh
 export PORTBOOK_CONFIG_DIR="$(mktemp -d)"
-portbook --output table config ranges add 50000-50499
+portbook --output table config remove --all
+portbook --output table config add 50000-50499
 portbook --output json config show
 ```
 
@@ -437,7 +551,17 @@ The on-disk format is:
 }
 ```
 
-A missing file means an empty pool. `config show` is read-only, including on a
+A missing config file uses 49152–65535 (16,384 candidate TCP ports) in memory.
+This is the full [IANA dynamic/private range](https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml).
+It can overlap OS ephemeral use; Portbook checks availability when allocating,
+but cannot guarantee a particular port or prevent a later unmanaged bind.
+An existing valid config is authoritative, including `"ranges": []`: no defaults
+are added to saved ranges. `config remove --all` explicitly persists an
+empty pool and disables new allocations while preserving existing-booking reuse.
+The first config mutation unions/subtracts from the effective defaults and saves
+the result. To replace defaults with a custom pool, clear first and then add.
+
+`config show` is read-only, including on a
 fresh installation: it creates no directory, config, or lock. Corrupt JSON,
 unknown fields, duplicate object members (including nested range fields,
 escaped names, or case aliases), unsupported versions, invalid ranges, non-regular files

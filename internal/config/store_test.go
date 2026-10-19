@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"portbook/internal/ports"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func TestMissingShowReadOnly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "absent")
 	p, err := (Store{Coordinator: state.Coordinator{Dir: dir}}).Read()
-	if err != nil || p.Count() != 0 {
+	if err != nil || p.Count() != 16384 {
 		t.Fatalf("%d %v", p.Count(), err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -117,7 +117,7 @@ func TestStoredNormalizationAndPermissions(t *testing.T) {
 	_, total, err := s.Mutate(context.Background(), func(p *ports.Pool) (int, error) {
 		return p.Apply([]ports.Range{{Start: 20, End: 30}, {Start: 1, End: 10}, {Start: 10, End: 19}, {Start: 50, End: 50}}, true), nil
 	})
-	if err != nil || total != 31 {
+	if err != nil || total != 16415 {
 		t.Fatalf("total %d: %v", total, err)
 	}
 	path := filepath.Join(s.Coordinator.Dir, "config.json")
@@ -129,7 +129,7 @@ func TestStoredNormalizationAndPermissions(t *testing.T) {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.Version != 1 || !reflect.DeepEqual(doc.Ranges, []ports.Range{{Start: 1, End: 30}, {Start: 50, End: 50}}) {
+	if doc.Version != 1 || !reflect.DeepEqual(doc.Ranges, []ports.Range{{Start: 1, End: 30}, {Start: 50, End: 50}, {Start: 49152, End: 65535}}) {
 		t.Fatalf("stored noncanonical document: %+v", doc)
 	}
 	info, err := os.Stat(path)

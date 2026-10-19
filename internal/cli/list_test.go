@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 	"reflect"
 	"strconv"
 	"strings"

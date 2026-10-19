@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
+	"github.com/sviatoslav/portbook/internal/cli"
 	"golang.org/x/term"
-	"portbook/internal/cli"
 )
 
 func main() {

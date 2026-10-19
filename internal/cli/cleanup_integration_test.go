@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 )
 
 func cleanupReport(t *testing.T, s string) booking.CleanupReport {

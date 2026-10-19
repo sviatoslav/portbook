@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/booking"
 )
 
 // Candidate ports come from genuinely bound ephemeral sockets, not assumptions
@@ -46,7 +46,8 @@ func candidateSockets(t *testing.T, n int) ([]int, map[int]net.Listener) {
 }
 func configCandidates(t *testing.T, dir string, ports []int) {
 	t.Helper()
-	args := []string{"config", "ranges", "add"}
+	run(t, dir, 0, "config", "remove", "--all")
+	args := []string{"config", "add"}
 	for _, p := range ports {
 		args = append(args, strconv.Itoa(p))
 	}
@@ -151,7 +152,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 	if doc.Version != 1 || doc.Bookings[physical]["default"] != p[1] || len(doc.Bookings) != 2 {
 		t.Fatal(string(before))
 	}
-	run(t, cfg, 0, "config", "ranges", "remove", "--all")
+	run(t, cfg, 0, "config", "remove", "--all")
 	if got := run(t, cfg, 0, "reserve", "--directory", nested); got != want {
 		t.Fatal(got)
 	}
@@ -320,7 +321,8 @@ func TestReserveConfigPrecedenceKeepsOneGlobalRegistry(t *testing.T) {
 	configs := []string{t.TempDir(), t.TempDir(), t.TempDir()}
 	p, held := candidateSockets(t, 3)
 	for i, dir := range configs {
-		locationRun(t, home, 0, "--config-dir", dir, "config", "ranges", "add", fmt.Sprint(p[i]))
+		locationRun(t, home, 0, "--config-dir", dir, "config", "remove", "--all")
+		locationRun(t, home, 0, "--config-dir", dir, "config", "add", fmt.Sprint(p[i]))
 	}
 	root := registryRoot(t, home)
 	locationRun(t, home, 0, "config", "path", "set", configs[0])

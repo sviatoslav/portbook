@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 // CleanupRow describes a check made during this invocation, not a future promise.

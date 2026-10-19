@@ -77,7 +77,8 @@ func TestLocationCLIAndPersistence(t *testing.T) {
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatal("set created destination", err)
 	}
-	locationRun(t, home, 0, "config", "ranges", "add", "50123")
+	locationRun(t, home, 0, "config", "remove", "--all")
+	locationRun(t, home, 0, "config", "add", "50123")
 	got = locationRun(t, home, 0, "config", "show")
 	if !strings.Contains(got, `"total":1`) {
 		t.Fatal(got)
@@ -133,12 +134,15 @@ func TestConcurrentLocationSwitchesAndRangeProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	targets := []string{get.Directory, t.TempDir(), t.TempDir()}
+	for _, target := range targets {
+		locationRun(t, home, 0, "--config-dir", target, "config", "remove", "--all")
+	}
 	var commands []*exec.Cmd
 	var diagnostics []*bytes.Buffer
 	const workers = 24
 	for i := 0; i < workers; i++ {
 		for _, args := range [][]string{
-			{"config", "ranges", "add", fmt.Sprint(52000 + i)},
+			{"config", "add", fmt.Sprint(52000 + i)},
 			{"config", "path", "set", targets[1+i%2]},
 			{"config", "path", "reset"},
 		} {
@@ -187,7 +191,7 @@ func TestBootstrapConflictsFailWithoutCreatingState(t *testing.T) {
 		{"config", "path", "set", reserved, "--help"},
 		{"--config-dir", reserved, "config", "path", "get"},
 		{"config", "path", "get", "--config-dir", reserved, "--help"},
-		{"--config-dir", reserved, "config", "ranges", "add", "1234"},
+		{"--config-dir", reserved, "config", "add", "1234"},
 	} {
 		got := locationRun(t, home, 1, args...)
 		if !strings.Contains(got, `"code":"storage_error"`) || !strings.Contains(got, "reserved bootstrap") {

@@ -52,3 +52,31 @@
   must not rewrite registry bytes. Preserve preexisting empty owner maps.
 - Cleanup must retain proposals when ancestor filesystem identities change and
   revalidate all proposed owners after probing, before deleting snapshot entries.
+
+- Release preparation uses `.goreleaser.yaml` and `scripts/release-snapshot.sh`.
+  Keep macOS/Linux amd64+arm64 packaging, SHA256 checksums, and deterministic
+  version/commit injection. Version output stays plain text and reads no state.
+  Preserve the canonical `github.com/sviatoslav/portbook` module/import path.
+- Test/package CI snapshots on PR/master without publication rights. Tag releases
+  must gate publication on source checks and native extracted-artifact smoke for
+  every target, publishing the exact checked archives without rebuilding them.
+  Keep write permission confined to the final tag-only publication job.
+- Run `goreleaser check`, snapshot packaging, and `scripts/verify-release.py`
+  after release changes. Smoke data must use temporary HOME/XDG/config/owner
+  paths. Distinguish cross-builds, local native execution, and actual CI results.
+  Keep build/dist output ignored. Review installation examples against assets;
+  do not claim unpublished versions exist or invent a project license.
+- Follow `docs/RELEASING.md`; tags, pushes, releases, visibility/license changes,
+  and Homebrew work need explicit user authorization. Preparation alone does not
+  authorize publication. Perform a fresh local review after verification and
+  fix actionable findings before handing off release preparation.
+
+- Missing config files use the in-memory default pool 49152-65535 (16,384 ports),
+  with no read-time writes. Existing configs, including explicit empty ranges,
+  remain authoritative. First mutations modify effective defaults before saving;
+  selecting a missing custom config uses defaults too. Corruption/access errors
+  must never trigger a fallback. Keep advanced pool setup out of the quick start.
+
+- Pool commands are `config add`, `config remove`, and `config remove --all`,
+  without an intermediate subcommand. Preserve set/range operands and scoped
+  help/flag validation; keep structured command labels aligned with these paths.

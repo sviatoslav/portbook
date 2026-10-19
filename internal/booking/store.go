@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"portbook/internal/config"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 var ErrExhausted = errors.New("no available ports in the configured pool")

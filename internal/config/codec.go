@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/ports"
 )
 
 const Version = 1

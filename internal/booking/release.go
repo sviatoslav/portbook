@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 // ErrUnavailable means a booking must be retained because its port is occupied

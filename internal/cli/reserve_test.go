@@ -11,8 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"portbook/internal/config"
-	"portbook/internal/state"
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
+	"github.com/sviatoslav/portbook/internal/state"
 )
 
 type failedWriter struct{}
@@ -24,6 +25,13 @@ func TestReservePlainOutputAndCommittedOutputFailure(t *testing.T) {
 	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
 	c, err := state.Default()
 	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := cfg.Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return 0, nil }); err != nil {
 		t.Fatal(err)
 	}
 	os.MkdirAll(c.Dir, 0700)
@@ -78,7 +86,11 @@ func TestReserveNewBookingSurvivesOutputFailure(t *testing.T) {
 	port := l.Addr().(*net.TCPAddr).Port
 	l.Close()
 	var out, diag bytes.Buffer
-	if code := Run(context.Background(), []string{"config", "ranges", "add", fmt.Sprint(port)}, &out, &diag, false); code != 0 {
+	if code := Run(context.Background(), []string{"config", "remove", "--all"}, &out, &diag, false); code != 0 {
+		t.Fatal(code, diag.String())
+	}
+	out.Reset()
+	if code := Run(context.Background(), []string{"config", "add", fmt.Sprint(port)}, &out, &diag, false); code != 0 {
 		t.Fatal(code, diag.String())
 	}
 	owner := t.TempDir()
