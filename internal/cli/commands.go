@@ -97,6 +97,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root.Args = groupArgs
 	root.RunE = requireSubcommand
 	repairHelp := map[*cobra.Command]bool{}
+	release := releaseCommand(o, out)
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		// Cobra parses flags before help but intentionally skips Args. Validate
 		// this command's supplied operands too, permitting only missing operands.
@@ -108,11 +109,16 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = err
 			return
 		}
-		// Resolve paths for help too, but allow explicit repair commands to bypass
+		// Resolve paths for help too. Release has no selected configuration;
+		// explicit path flags were validated above. Repair commands can bypass
 		// a broken saved pointer just as their execution does.
-		l, err := config.DefaultLocation(o.configDir, o.configDirSet())
-		if err == nil && !repairHelp[cmd] {
-			_, err = l.Resolve()
+		var err error
+		if cmd != release {
+			var l config.Location
+			l, err = config.DefaultLocation(o.configDir, o.configDirSet())
+			if err == nil && !repairHelp[cmd] {
+				_, err = l.Resolve()
+			}
 		}
 		if err != nil {
 			*helpErr = &commandError{code: "storage_error", err: err}
@@ -255,7 +261,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(reserve.Flags().Lookup("directory"))
-	root.AddCommand(configCmd, reserve)
+	root.AddCommand(configCmd, reserve, release)
 	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset, reserve} {
 		cmd.InitDefaultHelpFlag()
 	}

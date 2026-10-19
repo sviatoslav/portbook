@@ -4,8 +4,8 @@ Portbook is a standalone Go CLI for cooperating coding agents on one machine.
 It configures an allowed TCP port pool and reserves ports for directory/service pairs.
 The pool starts empty.
 
-Configuration and single-service reservation are implemented. Listing, release,
-cleanup, batch reservations, and agent skills are future work. There is no
+Configuration, single-service reservation, and conservative single-booking release
+are implemented. Listing, cleanup, batch reservations, and agent skills are future work. There is no
 daemon, proxy, database, heartbeat, or expiry mechanism.
 
 ## Build and install
@@ -30,6 +30,7 @@ local verification in this checkout was performed on macOS. Windows is untested.
 
 ```sh
 portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
+portbook release [SERVICE] [--directory ABSOLUTE_DIRECTORY]
 portbook config path get
 portbook config path set /absolute/path
 portbook config path reset
@@ -124,7 +125,7 @@ conservatively. Exhaustion fails without changing bookings.
 Sockets are not held after probing. An unmanaged process can bind a port between
 the probe and your application's listen call; reservations coordinate cooperating
 Portbook callers and cannot prevent this OS race. Portbook never automatically
-switches, expires, or reclaims a booking. There is currently no release command.
+switches, expires, or reclaims a booking. Use explicit release for idle bookings.
 
 Bookings live in `bookings.json` beside `state.lock` in the fixed OS-standard
 Portbook directory: `~/Library/Application Support/portbook/bookings.json` on
@@ -153,13 +154,53 @@ same temporary-file, file-sync, rename, and directory-sync protocol as config.
 As with config, a directory-sync error after rename reports failure after a
 committed replacement. Inspect the registry before retrying.
 
+## Releasing a booking
+
+```sh
+portbook release server --directory /projects/my-app
+portbook release                     # literal service default, owner is cwd
+portbook --output table release server --directory /projects/my-app
+```
+
+`release` accepts at most one service and uses the same directory validation,
+canonical symlink/case aliases, service identity, and `--` rules as `reserve`.
+It removes only that booking, and removes its owner map when no services remain.
+A missing booking is an idempotent success: it does not create or rewrite
+`bookings.json`. Release may create the fixed coordination directory and lock.
+
+Release is conservative: it refuses with `runtime_error` if the booked port is
+occupied, forbidden, or cannot be proven available by the shared IPv4/IPv6 TCP
+probe. Stop your listener before releasing. It never kills processes or infers
+listener ownership. The check is an instant observation; unmanaged processes can
+bind after the probe. Every other booking is preserved, including absent owners.
+
+The fixed global lock covers registry read, owner matching, probing, and atomic
+save. Release does not read the selected pool or saved config pointer, so an
+out-of-pool booking remains releasable even with broken configuration. Explicit
+`--config-dir` flags still undergo normal path validation, including for help.
+Unused configuration environment values do not block release or its help. Corrupt registry data
+fails closed without modification, including on repeated release attempts.
+
+JSON success always has `command`, `directory`, `service`, nullable `port`, and
+`released`. A release reports the removed port; a no-op has `port: null` and
+`released: false`. Table output is a short `Released port ...` or `No booking ...`
+message. Success is printed only after the save completes.
+
+```json
+{"command":"release","directory":"/projects/my-app","service":"server","port":50000,"released":true}
+```
+
+```json
+{"command":"release","directory":"/projects/my-app","service":"server","port":null,"released":false}
+```
+
 ## Output and exit codes
 
 `reserve` success always writes only a decimal port plus newline, on terminals
 and pipes and even with `--output json` or `--output table`. Its help and errors
 follow the normal format rules below.
 
-For configuration commands, terminal stdout is human-readable text/tables.
+For configuration and release commands, terminal stdout is human-readable text/tables.
 When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
 `--output json` overrides this anywhere in the command; `--output=json` also
 works. `--help` / `-h` describes commands and examples and follows this convention
@@ -169,7 +210,7 @@ Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
 and `--all` mixed with operands still fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
 can appear before or after the command path; `--all` belongs to `ranges remove`
-and `--directory` belongs to `reserve`.
+and `--directory` belongs to `reserve` and `release`.
 Repeated `--output`, `--config-dir`, `--directory`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config ranges add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
@@ -332,7 +373,7 @@ go vet ./...
 ```
 
 The integration suite builds the real executable and exercises independent
-processes, including concurrent additions, removals, location switches, and reservations. Tests use isolated
+processes, including concurrent additions, removals, location switches, reservations, and releases. Tests use isolated
 temporary directories and never write to the normal user configuration.
 
 The command tree uses [Cobra](https://cobra.dev/docs/how-to-guides/working-with-flags/)
