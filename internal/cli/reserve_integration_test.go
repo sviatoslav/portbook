@@ -90,7 +90,7 @@ func registryRoot(t *testing.T, dir string) string {
 	}
 	return loc.Directory
 }
-func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
+func TestReserveCLISelectionCwdAliasesAndGet(t *testing.T) {
 	cfg := t.TempDir()
 	p, held := candidateSockets(t, 4)
 	configCandidates(t, cfg, p)
@@ -116,9 +116,9 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"reserve", "default", "--directory", nested},
-		{"--output=json", "reserve", "--directory", alias},
-		{"reserve", "default", "--directory", nested, "--output=table"},
+		{"get", "default", "--directory", nested},
+		{"--output=json", "get", "--directory", alias},
+		{"get", "default", "--directory", nested, "--output=table"},
 	} {
 		if got := run(t, cfg, 0, args...); got != want {
 			t.Fatal(args, got, want)
@@ -153,7 +153,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 		t.Fatal(string(before))
 	}
 	run(t, cfg, 0, "config", "remove", "--all")
-	if got := run(t, cfg, 0, "reserve", "--directory", nested); got != want {
+	if got := run(t, cfg, 0, "get", "--directory", nested); got != want {
 		t.Fatal(got)
 	}
 	if got := run(t, cfg, 1, "reserve", "extra", "--directory", nested); !strings.Contains(got, `"code":"runtime_error"`) {
@@ -161,7 +161,7 @@ func TestReserveCLISelectionCwdAliasesAndReuse(t *testing.T) {
 	}
 	after, _ := os.ReadFile(path)
 	if !bytes.Equal(before, after) {
-		t.Fatal("reuse/exhaustion rewrote bookings")
+		t.Fatal("get/exhaustion rewrote bookings")
 	}
 	for _, name := range []string{booking.File, "state.lock", "location.json"} {
 		if _, err := os.Stat(filepath.Join(cfg, name)); !os.IsNotExist(err) {
@@ -257,8 +257,13 @@ func TestReserveIndependentConcurrentProcesses(t *testing.T) {
 			}
 		}
 		seen := map[string]bool{}
+		failures := 0
 		for i, cmd := range cmds {
 			if err := cmd.Wait(); err != nil {
+				if same && cmd.ProcessState.ExitCode() == 1 && outs[i].Len() == 0 && strings.Contains(diags[i].String(), "reservation already exists") && strings.Contains(diags[i].String(), `"code":"runtime_error"`) {
+					failures++
+					continue
+				}
 				t.Fatalf("worker %d: %v %s", i, err, &diags[i])
 			}
 			if diags[i].Len() != 0 {
@@ -274,7 +279,7 @@ func TestReserveIndependentConcurrentProcesses(t *testing.T) {
 			}
 			seen[port] = true
 		}
-		if same && len(seen) != 1 {
+		if same && (len(seen) != 1 || failures != workers-1) {
 			t.Fatal("same identity diverged", seen)
 		}
 	}
@@ -354,8 +359,8 @@ func TestReserveConfigPrecedenceKeepsOneGlobalRegistry(t *testing.T) {
 			t.Fatal(i, got, p[i])
 		}
 	}
-	// Reuse is independent of whichever pool is now selected.
-	if got := locationRun(t, home, 0, "reserve", "flag", "--directory", owner); got != flag {
+	// Get is independent of whichever pool is now selected.
+	if got := locationRun(t, home, 0, "get", "flag", "--directory", owner); got != flag {
 		t.Fatal(got, flag)
 	}
 	after, _ := os.ReadFile(pointerPath)

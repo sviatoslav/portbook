@@ -87,6 +87,7 @@ def smoke(binary, temp, version, commit):
     require("Usage:" in json.loads(run("--help"))["help"], "JSON help mismatch")
     require("Usage:" in run("--output", "table", "--help"), "table help mismatch")
     require(json.loads(run("list", "--all"))["bookings"] == [], "fresh list")
+    require("reservation not found" in run("get", code=1), "fresh missing get")
     require(json.loads(run("cleanup", "--dry-run"))["rows"] == [], "fresh cleanup")
     require(all(not Path(env[key]).exists() for key in ("HOME", "XDG_CONFIG_HOME", "PORTBOOK_CONFIG_DIR")), "read-only commands wrote state")
     require(json.loads(run("--output", "invalid", code=2))["error"]["code"] == "usage_error", "error contract")
@@ -99,15 +100,26 @@ def smoke(binary, temp, version, commit):
     for port in (default, api):
         require(re.fullmatch(r"[0-9]+\n", port) and 49152 <= int(port) <= 65535, "default bare port output")
     require(default != api, "distinct services shared a port")
-    require(run("reserve", "api") == api, "stable reuse")
+    registry = next(temp.rglob("bookings.json"))
+    before = registry.read_bytes()
+    identity = registry.stat()
+    require(run("get", "api") == api, "saved port lookup")
+    duplicate = json.loads(run("reserve", "api", code=1))["error"]
+    require(duplicate["code"] == "runtime_error" and "reservation already exists" in duplicate["message"], "duplicate reserve")
+    require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "get/duplicate reserve rewrote state")
     require(not Path(env["PORTBOOK_CONFIG_DIR"]).exists(), "reserve persisted default config")
     rows = json.loads(run("list"))["bookings"]
     require(rows == [{"directory": str(temp), "service": "api", "port": int(api)}, {"directory": str(temp), "service": "default", "port": int(default)}], "README list bookings")
     require(json.loads(run("config", "remove", "--all"))["changed"] == 16384, "explicit empty pool")
-    require(run("reserve", "api", "--output", "json") == api, "empty-pool reuse")
+    require(run("get", "api", "--output", "json") == api, "empty-pool get")
     require(json.loads(run("reserve", "new", code=1))["error"]["code"] == "runtime_error", "empty pool must disable new allocations")
     require(json.loads(run("release", "api"))["released"], "README release")
-    require(not json.loads(run("release", "api"))["released"], "missing release")
+    before = registry.read_bytes()
+    identity = registry.stat()
+    for command in ("release", "get"):
+        missing = json.loads(run(command, "api", code=1))["error"]
+        require(missing["code"] == "runtime_error" and "reservation not found" in missing["message"], f"missing {command}")
+    require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "missing lifecycle command rewrote state")
     require(json.loads(run("release"))["released"], "release default")
     require(json.loads(run("config", "add", "49152-65535"))["total"] == 16384, "custom pool")
     owner = temp / "owner"

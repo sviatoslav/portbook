@@ -49,7 +49,7 @@ func (s Store) Release(ctx context.Context, directory, service string) (ReleaseR
 		res.Directory = key
 		port := r[key][service]
 		if port == 0 {
-			return ctx.Err()
+			return fmt.Errorf("%w for service %q in %q", ErrNotFound, service, key)
 		}
 		probe := s.Probe
 		if probe == nil {

@@ -23,20 +23,14 @@ func TestReleaseOutputDefaultsAndWriteErrors(t *testing.T) {
 	t.Setenv("PORTBOOK_CONFIG_DIR", "relative ignored")
 	for _, terminal := range []bool{false, true} {
 		var out, diag bytes.Buffer
-		if code := Run(context.Background(), []string{"release", "--directory", owner}, &out, &diag, terminal); code != 0 || diag.Len() != 0 {
-			t.Fatal(code, diag.String())
+		if code := Run(context.Background(), []string{"release", "--directory", owner}, &out, &diag, terminal); code != 1 || out.Len() != 0 || !strings.Contains(diag.String(), "reservation not found") {
+			t.Fatal(code, out.String(), diag.String())
 		}
-		if terminal {
-			if !bytes.Contains(out.Bytes(), []byte("No booking")) {
-				t.Fatal(out.String())
-			}
-		} else {
-			var doc map[string]any
-			if err := json.Unmarshal(out.Bytes(), &doc); err != nil || len(doc) != 5 || doc["port"] != nil || doc["released"] != false {
-				t.Fatal(out.String(), err)
-			}
+		if !terminal && !strings.Contains(diag.String(), `"code":"runtime_error"`) {
+			t.Fatal(diag.String())
 		}
 	}
+
 	var diag bytes.Buffer
 	if code := Run(context.Background(), []string{"release", "--directory", owner}, releaseFailWriter{}, &diag, false); code != 1 || !bytes.Contains(diag.Bytes(), []byte(`"code":"runtime_error"`)) {
 		t.Fatal(code, diag.String())
@@ -74,16 +68,14 @@ func TestReleaseTableEscapesIdentitiesAndOutputFailureKeepsCommit(t *testing.T) 
 	// Valid service and directory identities may include terminal control bytes.
 	port := 45000
 	res := booking.ReleaseResult{Directory: "/tmp/owner\n\x1b[31m\u2028\u202e\"\\", Service: "server\t\x1b[2J\u2029\u2066\"\\", Port: &port, Released: true}
-	for _, released := range []bool{false, true} {
-		res.Released = released
-		var out bytes.Buffer
-		if err := renderRelease(&out, "table", res); err != nil {
-			t.Fatal(err)
-		}
-		if strings.Count(out.String(), "\n") != 1 || strings.ContainsAny(strings.TrimSuffix(out.String(), "\n"), "\t\x1b\u2028\u2029\u202e\u2066") {
-			t.Fatal("unescaped identity", out.String())
-		}
+	var table bytes.Buffer
+	if err := renderRelease(&table, "table", res); err != nil {
+		t.Fatal(err)
 	}
+	if strings.Count(table.String(), "\n") != 1 || strings.ContainsAny(strings.TrimSuffix(table.String(), "\n"), "\t\x1b\u2028\u2029\u202e\u2066") {
+		t.Fatal("unescaped identity", table.String())
+	}
+
 	var jsonOut bytes.Buffer
 	if err := renderRelease(&jsonOut, "json", res); err != nil {
 		t.Fatal(err)

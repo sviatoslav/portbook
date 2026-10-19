@@ -58,7 +58,7 @@ func TestReleasePreservesOtherBookingsAndIgnoresConfig(t *testing.T) {
 	}
 	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("missing booking probed"); return false, nil }
 	res, err = s.Release(context.Background(), dir, "default")
-	if err != nil || res.Released || res.Port != nil || !bytes.Equal(before, contents(t, path)) {
+	if !errors.Is(err, ErrNotFound) || res.Released || res.Port != nil || !bytes.Equal(before, contents(t, path)) {
 		t.Fatal(res, err)
 	}
 	afterInfo, err := os.Stat(path)
@@ -79,7 +79,7 @@ func TestReleaseNoopAndFailuresPreserveRegistry(t *testing.T) {
 	s, dir := fixture(t)
 	dir, _ = Directory(dir)
 	res, err := s.Release(context.Background(), dir, "default")
-	if err != nil || res.Released || res.Port != nil {
+	if !errors.Is(err, ErrNotFound) || res.Released || res.Port != nil {
 		t.Fatal(res, err)
 	}
 	path := filepath.Join(s.Config.Coordinator.Dir, File)
@@ -309,7 +309,7 @@ func TestReleaseDoesNotAdoptReplacedOwnerSymlink(t *testing.T) {
 	}
 	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("adopted replaced owner booking"); return true, nil }
 	res, err := s.Release(context.Background(), old, "default")
-	if err != nil || res.Released || res.Port != nil || !bytes.Equal(before, contents(t, path)) {
+	if !errors.Is(err, ErrNotFound) || res.Released || res.Port != nil || !bytes.Equal(before, contents(t, path)) {
 		t.Fatal(res, err)
 	}
 }

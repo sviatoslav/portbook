@@ -30,9 +30,8 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	cfg := t.TempDir()
 	root := registryRoot(t, cfg)
 	owner := t.TempDir()
-	missing := releaseJSON(t, run(t, cfg, 0, "release", "--directory", owner))
-	if missing.Released || missing.Port != nil || missing.Service != "default" {
-		t.Fatal(missing)
+	if got := run(t, cfg, 1, "release", "--directory", owner); !strings.Contains(got, "reservation not found") {
+		t.Fatal(got)
 	}
 	path := filepath.Join(root, booking.File)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -83,8 +82,8 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	}
 	cmd = command(cfg, "release")
 	cmd.Dir = owner
-	if res := releaseJSON(t, processResult(t, cmd, 0)); res.Released || res.Port != nil {
-		t.Fatal(res)
+	if got := processResult(t, cmd, 1); !strings.Contains(got, "reservation not found") {
+		t.Fatal(got)
 	}
 	unchanged, _ := os.ReadFile(path)
 	if !bytes.Equal(after, unchanged) {
@@ -93,7 +92,7 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	if got := run(t, cfg, 0, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "Released port") {
 		t.Fatal(got)
 	}
-	if got := run(t, cfg, 0, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "No booking") {
+	if got := run(t, cfg, 1, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "reservation not found") {
 		t.Fatal(got)
 	}
 	for _, name := range []string{"config.json", "location.json"} {
@@ -163,9 +162,8 @@ func TestReleaseCLIValidationAndFlagBoundaries(t *testing.T) {
 		}
 	}
 	for _, service := range []string{"--help", "--output=table", "服务"} {
-		res := releaseJSON(t, run(t, cfg, 0, "release", "--directory", owner, "--", service))
-		if res.Service != service || res.Released {
-			t.Fatal(res)
+		if got := run(t, cfg, 1, "release", "--directory", owner, "--", service); !strings.Contains(got, "reservation not found") {
+			t.Fatal(got)
 		}
 	}
 	noAccess := t.TempDir()
@@ -283,7 +281,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "location.json"), []byte("broken pointer"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, feature := range []string{"list", "release"} {
+	for _, feature := range []string{"get", "list", "release"} {
 		cmd := command(cfg, feature, "--help")
 		cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative unused")
 		if got := processResult(t, cmd, 0); !strings.Contains(got, "--directory") {
@@ -294,7 +292,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatal(rows)
 	}
-	if got := run(t, cfg, 1, "reserve", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
+	if got := run(t, cfg, 1, "reserve", "new", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
 		t.Fatal(got)
 	}
 	res = releaseJSON(t, run(t, cfg, 0, "release", "server", "--directory", alias))

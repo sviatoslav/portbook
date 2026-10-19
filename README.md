@@ -4,15 +4,17 @@ Portbook coordinates local TCP port reservations across projects, worktrees, and
 coding agents. Each directory and service ID keeps its assigned port; new
 reservations skip ports already booked or in use.
 
-From your project directory (port numbers are illustrative):
+From `/projects/my-app` (port numbers are illustrative):
 
 ```console
 $ portbook reserve api
 49152
-$ portbook reserve api
+$ portbook get api
 49152
 $ portbook reserve web
 49153
+$ portbook release web --output table
+Released port 49153 for "web" in "/projects/my-app".
 ```
 
 [Install Portbook](#installation).
@@ -21,7 +23,10 @@ $ portbook reserve web
 
 The public repository is available now under the [MIT License](#license).
 [v0.1.0 is available](https://github.com/sviatoslav/portbook/releases/tag/v0.1.0).
-Install with Homebrew, download a binary, or build from source.
+Install with Homebrew, download a binary, or build from source. The command
+reference below describes the next source version: published v0.1.0 still uses
+create-or-return `reserve`, has no top-level `get`, and succeeds on missing
+`release`. Build from source to use the lifecycle shown here.
 
 ### Homebrew
 
@@ -138,7 +143,7 @@ Ask for a port from your project directory:
 ```sh
 portbook reserve                  # 49152
 portbook reserve api              # 49153
-portbook reserve api              # 49153 again
+portbook get api                  # 49153 again
 portbook list                     # see this project's bookings
 portbook release api              # release it after stopping your server
 ```
@@ -148,14 +153,15 @@ booked ports are skipped. Numbers above are illustrative; new reservations use
 the lowest available allowed port. Customize the pool only if needed.
 
 A booking belongs to your current directory and service name (`default`
-when omitted); asking again reuses the same port. Projects share one registry,
+when omitted). Create it with `reserve`, read it with `get`, and remove it with
+`release` after stopping the listener. Projects share one registry,
 so they avoid each other's booked ports. Run from another directory for another
 project, or use `--directory /absolute/project/path`.
 
-`reserve` prints just the port, ready for a script or coding agent:
+`get` and `reserve` print just the port, ready for a script or coding agent:
 
 ```sh
-PORT=$(portbook reserve api)
+PORT=$(portbook get api)
 ```
 
 Portbook also provides conservative `cleanup` for abandoned bookings. It runs
@@ -165,6 +171,7 @@ agent skills are future work.
 ## Commands
 
 ```sh
+portbook get [SERVICE] [--directory ABSOLUTE_DIRECTORY]
 portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
 portbook release [SERVICE] [--directory ABSOLUTE_DIRECTORY]
 portbook list [--directory ABSOLUTE_DIRECTORY | --all]
@@ -228,12 +235,31 @@ No port ranges configured.
 Total: 0 ports.
 ```
 
+## Getting a reserved port
+
+`portbook get [SERVICE] [--directory ABSOLUTE_DIRECTORY]` reads an existing
+reservation and prints its decimal port plus newline, including with
+`--output json`. It uses the same owner/service validation and aliases as `reserve`.
+Missing reservations fail with `reservation not found`; it never allocates.
+
+Like `list`, `get` reads one atomically replaced registry snapshot without locks,
+TCP probes, config/pointer reads, or writes. It creates no state on a fresh
+installation. A concurrent mutation can make the returned snapshot stale.
+Explicit `--config-dir` still receives path validation; unused configuration
+environment and saved selections do not affect lookup or its help. Corrupt or
+inaccessible registry data fails closed.
+
+Missing reservations (`get`/`release`) and duplicate reservations (`reserve`)
+write diagnostics only to stderr, leave stdout empty, and exit 1 with the existing
+`runtime_error` code. Their messages distinguish `reservation not found` from
+`reservation already exists`, and include the service and owner directory.
+
 ## Reserving a port
 
 ```text
 $ portbook reserve server --directory /projects/my-app
 50000
-$ portbook reserve server --directory /projects/my-app
+$ portbook get server --directory /projects/my-app
 50000
 $ portbook reserve --directory /projects/my-app
 50001
@@ -241,7 +267,9 @@ $ portbook reserve --directory /projects/my-app
 
 These ports are illustrative: a new booking uses the lowest available configured
 port. `reserve` accepts at most one service. Omitting it selects the literal
-`default`, so `reserve` and `reserve default` reuse the same booking.
+`default`, so `get` and `get default` read the same booking.
+An existing reservation makes `reserve` fail with `reservation already exists`,
+even when its port is occupied or outside the current pool.
 Service identities are nonempty, case-sensitive Unicode strings without NUL;
 use `--` before a service beginning with a hyphen.
 
@@ -254,9 +282,9 @@ aliases without folding distinct directory or service names. Missing, inaccessib
 or file targets fail;
 Portbook never creates the owner directory or silently falls back to cwd.
 
-An existing directory/service booking returns its saved port, even if an OS
+`get` returns the saved port of an existing directory/service booking, even if an OS
 listener occupies it, the configured pool is empty, or that port has been removed
-from the pool. Reuse does not claim a listener belongs to Portbook or its caller.
+from the pool. Reading a booking does not claim a listener belongs to Portbook or its caller.
 New reservations skip every port booked by any directory/service, including idle
 bookings, and every candidate that cannot be bound. Probes briefly bind wildcard
 IPv4 and IPv6 TCP sockets (where the family is supported), then close them.
@@ -287,10 +315,11 @@ the original evidence on repeated commands. Recorded directories may subsequentl
 disappear; decoding retains their bookings. Reservation still requires a valid
 current owner directory. Do not reset the registry to resolve corruption.
 
-Reservation holds the existing global lock once across registry read, selected
-configuration resolution/read, reuse or probing, and atomic registry save. It
-never writes the config or saved pointer. Config updates and path switching use
-the same lock. Success is emitted only after saving. Atomic replacement uses the
+Reservation holds the existing global lock once across registry read,
+duplicate detection, selected configuration resolution/read, probing, and atomic
+registry save. Concurrent reserves for one identity yield exactly one success;
+the rest fail with `reservation already exists`. It never writes the config or
+saved pointer. Config updates and path switching use the same lock. Success is emitted only after saving. Atomic replacement uses the
 same temporary-file, file-sync, rename, and directory-sync protocol as config.
 As with config, a directory-sync error after rename reports failure after a
 committed replacement. Inspect the registry before retrying.
@@ -306,7 +335,7 @@ portbook --output table release server --directory /projects/my-app
 `release` accepts at most one service and uses the same directory validation,
 canonical symlink/case aliases, service identity, and `--` rules as `reserve`.
 It removes only that booking, and removes its owner map when no services remain.
-A missing booking is an idempotent success: it does not create or rewrite
+A missing booking fails with `reservation not found` without creating or rewriting
 `bookings.json`. Release may create the fixed coordination directory and lock.
 
 Release is conservative: it refuses with `runtime_error` if the booked port is
@@ -322,17 +351,12 @@ out-of-pool booking remains releasable even with broken configuration. Explicit
 Unused configuration environment values do not block release or its help. Corrupt registry data
 fails closed without modification, including on repeated release attempts.
 
-JSON success always has `command`, `directory`, `service`, nullable `port`, and
-`released`. A release reports the removed port; a no-op has `port: null` and
-`released: false`. Table output is a short `Released port ...` or `No booking ...`
-message. Success is printed only after the save completes.
+JSON success always has `command`, `directory`, `service`, `port`, and
+`released`. A release reports the removed port and `released: true`.
+Table output is a short `Released port ...` message. Success is printed only after the save completes.
 
 ```json
 {"command":"release","directory":"/projects/my-app","service":"server","port":50000,"released":true}
-```
-
-```json
-{"command":"release","directory":"/projects/my-app","service":"server","port":null,"released":false}
 ```
 
 ## Listing bookings
@@ -434,8 +458,8 @@ normal error schema and exit codes. For example:
 
 ## Output and exit codes
 
-`reserve` success always writes only a decimal port plus newline, on terminals
-and pipes and even with `--output json` or `--output table`. Its help and errors
+`get` and `reserve` success always write only a decimal port plus newline, on
+terminals and pipes and even with `--output json` or `--output table`. Their help and errors
 follow the normal format rules below.
 
 For configuration, list, release, and cleanup commands, terminal stdout is human-readable text/tables.
@@ -449,7 +473,7 @@ Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
 fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
 can appear before or after the command path; `--all` belongs to `config remove`
-and `list`; `--directory` belongs to `reserve`, `list`, and `release`; and
+and `list`; `--directory` belongs to `get`, `reserve`, `list`, and `release`; and
 `--dry-run` belongs to `cleanup`.
 Repeated `--output`, `--config-dir`, `--directory`, `--dry-run`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config add -- 51000` works and `--help` after `--` is an operand.
@@ -582,7 +606,7 @@ It can overlap OS ephemeral use; Portbook checks availability when allocating,
 but cannot guarantee a particular port or prevent a later unmanaged bind.
 An existing valid config is authoritative, including `"ranges": []`: no defaults
 are added to saved ranges. `config remove --all` explicitly persists an
-empty pool and disables new allocations while preserving existing-booking reuse.
+empty pool and disables new allocations while preserving existing bookings for `get` and `release`.
 The first config mutation unions/subtracts from the effective defaults and saves
 the result. To replace defaults with a custom pool, clear first and then add.
 
@@ -642,6 +666,8 @@ Code responsibilities:
 | `cmd/portbook` | Process exit and terminal detection |
 | `internal/cli/commands.go` | Command definitions, flags, operand validation, scoped help |
 | `internal/cli/execute.go` | Explicit config and path handlers |
+| `internal/cli/get.go` | Read-only bare-port lookup command |
+| `internal/booking/get.go` | Existing reservation lookup from a registry snapshot |
 | `internal/cli/list.go` | Read-only list command, scoped validation, and rendering |
 | `internal/booking/list.go` | Sorted registry snapshots and scoped owner matching |
 | `internal/cli/cleanup.go` | Cleanup command, preview flag, and deterministic reports |

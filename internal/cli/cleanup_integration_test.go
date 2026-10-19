@@ -141,8 +141,13 @@ func TestCleanupReserveIndependentProcessContention(t *testing.T) {
 		}
 	}
 	var port string
+	failures := 0
 	for i, cmd := range cmds {
 		if err := cmd.Wait(); err != nil || diags[i].Len() != 0 {
+			if i%2 == 0 && cmd.ProcessState.ExitCode() == 1 && outs[i].Len() == 0 && strings.Contains(diags[i].String(), "reservation already exists") {
+				failures++
+				continue
+			}
 			t.Fatal(err, diags[i].String())
 		}
 		if i%2 == 0 {
@@ -152,7 +157,10 @@ func TestCleanupReserveIndependentProcessContention(t *testing.T) {
 			port = outs[i].String()
 		}
 	}
-	if got := run(t, cfg, 0, "reserve", "live", "--directory", live); got != port {
+	if failures != workers/2-1 || port == "" {
+		t.Fatal("expected one successful reservation", failures, port)
+	}
+	if got := run(t, cfg, 0, "get", "live", "--directory", live); got != port {
 		t.Fatal("lost reservation", got, port)
 	}
 	root := registryRoot(t, cfg)

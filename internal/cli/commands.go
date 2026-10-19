@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -112,6 +111,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 		return nil
 	}
 	repairHelp := map[*cobra.Command]bool{}
+	lookup := getCommand(o, out)
 	release := releaseCommand(o, out)
 	cleanup := cleanupCommand(o, out)
 	list := newListCommand(o, out)
@@ -126,11 +126,11 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = err
 			return
 		}
-		// List, release, and cleanup use only the fixed registry, including for help.
+		// Get, list, release, and cleanup use only the fixed registry, including for help.
 		// Explicit path flags were validated above. Repair commands can bypass
 		// a broken saved pointer just as their execution does.
 		var err error
-		if cmd != release && cmd != list && cmd != cleanup {
+		if cmd != lookup && cmd != release && cmd != list && cmd != cleanup {
 			var l config.Location
 			l, err = config.DefaultLocation(o.configDir, o.configDirSet())
 			if err == nil && !repairHelp[cmd] {
@@ -229,31 +229,9 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	var owner, directory, service string
 	reserve := &cobra.Command{
 		Use: "reserve [SERVICE]", Short: "Reserve a TCP port for a directory and service (default: default)",
-		Long:    "Reserve the lowest available allowed TCP port for a directory and service. No configuration is needed: a missing config uses 49152-65535 (16,384 ports). Existing bookings are reused. Success always prints only the decimal port, even with --output json. The owner defaults to the current directory; Git roots are not detected.",
+		Long:    "Reserve the lowest available allowed TCP port for a directory and service. No configuration is needed: a missing config uses 49152-65535 (16,384 ports). An existing booking fails with reservation already exists. Use get to read it. Success always prints only the decimal port, even with --output json. The owner defaults to the current directory; Git roots are not detected.",
 		Example: "  portbook reserve server --directory /projects/my-app\n  portbook reserve",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 1 {
-				return fmt.Errorf("reserve accepts at most one service")
-			}
-			service = "default"
-			if len(args) == 1 {
-				service = args[0]
-			}
-			if err := booking.ValidateService(service); err != nil {
-				return err
-			}
-			selected := directory
-			if !cmd.Flags().Changed("directory") {
-				var err error
-				selected, err = os.Getwd()
-				if err != nil {
-					return &commandError{code: "runtime_error", err: err}
-				}
-			}
-			var err error
-			owner, err = booking.Directory(selected)
-			return err
-		},
+		Args:    serviceOwnerArgs(&directory, &owner, &service),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := o.validate(); err != nil {
 				return err
@@ -265,7 +243,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			port, err := (booking.Store{Config: cfg}).Reserve(cmd.Context(), owner, service)
 			if err != nil {
 				code := "storage_error"
-				if errors.Is(err, booking.ErrExhausted) {
+				if errors.Is(err, booking.ErrExhausted) || errors.Is(err, booking.ErrAlreadyExists) {
 					code = "runtime_error"
 				}
 				return &commandError{code: code, err: err}
@@ -278,7 +256,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(reserve.Flags().Lookup("directory"))
-	root.AddCommand(configCmd, reserve, list, release, cleanup)
+	root.AddCommand(configCmd, lookup, reserve, list, release, cleanup)
 	for _, cmd := range []*cobra.Command{root, configCmd, show, add, remove, path, get, set, reset, reserve, list} {
 		cmd.InitDefaultHelpFlag()
 	}
