@@ -1,5 +1,7 @@
 # Preparing and publishing a release
 
+[Back to README](../README.md) · [Development](DEVELOPING.md)
+
 This guide covers local snapshot checks and intentional release publication.
 The public project uses the MIT license in `LICENSE`. Creating/pushing version
 tags and publishing releases require explicit user authorization.
@@ -28,14 +30,21 @@ the displayed commit identifies the base, not uncommitted edits. Use a clean
 checkout when validating a candidate for publication.
 
 `scripts/verify-release.py dist --commit "$(git rev-parse HEAD)"` checks all four
-archives, their exact documentation files, executable modes, SHA256 manifest,
+archives, their exact documentation files and relative links/anchors, executable
+modes, SHA256 manifest,
 ELF/Mach-O architecture, Go module/build metadata and commit. It extracts and
 runs only the host's native binary. The smoke test covers version, table/JSON
-help, error output, fresh read-only list/cleanup, missing-config defaults of
+help, error output, installer dependency/argv/passthrough with a fake npx,
+fresh read-only list/cleanup, missing-config defaults of
 49152–65535 (16,384 ports), config changes, bare-port reserve
 and read-only get, required-service validation, explicit literal `default`
-compatibility, duplicate-reserve refusal, listing, release and missing-release
-refusal, and abandoned-owner cleanup.
+compatibility, duplicate-reserve refusal, listing, single/bulk release with listener survival,
+busy-port allocation refusal after release, missing-release errors, and abandoned-owner cleanup.
+
+Each archive includes README.md, LICENSE, and all five guides in docs/
+(INSTALLING.md, REFERENCE.md, DEVELOPING.md, RELEASING.md, and AGENT-SETUP.md). Keep the archive
+file list and verifier aligned when moving documentation.
+
 All runtime configuration and bookings use temporary HOME/XDG/config/owner
 paths, removed afterwards. It does not access real Portbook data.
 
@@ -51,8 +60,8 @@ CI results are evidence only after the workflow actually runs.
 
 Do this only after explicit publication authorization, with the release changes
 merged, a clean checkout, the MIT license included in every archive,
-and passing candidate checks. The commands below use the first release version,
-`v0.1.0`; select a new SemVer version for later releases. Check remote tags and
+and passing candidate checks. Replace `vX.Y.Z` below with a new, unused SemVer
+version. The published `v0.1.0` must not be reused. Check remote tags and
 releases first, and never overwrite an existing published tag or release. The
 current module path supports v0/v1; v2+ requires a module-path migration first.
 
@@ -62,8 +71,8 @@ git pull --ff-only
 git status --short
 scripts/release-snapshot.sh
 # Stop if the checkout is dirty or any check fails. Only after authorization:
-git tag -a v0.1.0 -m 'Release v0.1.0'
-git push origin v0.1.0
+git tag -a vX.Y.Z -m 'Release vX.Y.Z'
+git push origin vX.Y.Z
 ```
 
 Pushing an explicit `v...` tag runs the workflow gates again for that exact commit:
@@ -82,7 +91,7 @@ it can publish. If checks fail, inspect the failed job and repair the candidate;
 do not bypass gates. The publish job fails if a release already exists; review
 partial publication manually before retrying instead of overwriting assets or
 moving a published tag. After a successful run, inspect the release assets and
-download/verify the checksums as described in README.md.
+download/verify the checksums as described in [the installation guide](INSTALLING.md).
 
 Configuration reference: [GoReleaser quick start](https://goreleaser.com/getting-started/quick-start/),
 [archives](https://goreleaser.com/customization/package/archives/), and

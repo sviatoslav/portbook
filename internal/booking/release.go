@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/sviatoslav/portbook/internal/state"
 )
-
-// ErrUnavailable means a booking must be retained because its port is occupied
-// or the probe could not establish that it is available.
-var ErrUnavailable = errors.New("booked TCP port is occupied or availability is uncertain")
 
 type ReleaseResult struct {
 	Directory string `json:"directory"`
@@ -19,17 +16,37 @@ type ReleaseResult struct {
 	Released  bool   `json:"released"`
 }
 
-// Release uses only the fixed coordinator, never the selected configuration.
-// The lock covers owner matching, the conservative probe, and the atomic save.
+type ReleaseAllResult struct {
+	Directory string `json:"directory"`
+	Ports     []int  `json:"ports"`
+	Released  int    `json:"released"`
+}
+
+// Release deletes one registry booking. It never probes ports or stops listeners.
 func (s Store) Release(ctx context.Context, directory, service string) (ReleaseResult, error) {
 	if err := ValidateService(service); err != nil {
 		return ReleaseResult{}, err
 	}
-	dir, err := Directory(directory)
+	res, err := s.releaseRecords(ctx, directory, service, false)
 	if err != nil {
 		return ReleaseResult{}, err
 	}
-	res := ReleaseResult{Directory: dir, Service: service}
+	return ReleaseResult{Directory: res.Directory, Service: service, Port: &res.Ports[0], Released: true}, nil
+}
+
+// ReleaseAll deletes only this exact canonical owner's bookings, never descendants.
+func (s Store) ReleaseAll(ctx context.Context, directory string) (ReleaseAllResult, error) {
+	return s.releaseRecords(ctx, directory, "", true)
+}
+
+// The fixed global lock covers owner matching, reads, decisions, and one atomic
+// save. Configuration selection and TCP availability are irrelevant to deletion.
+func (s Store) releaseRecords(ctx context.Context, directory, service string, all bool) (ReleaseAllResult, error) {
+	dir, err := Directory(directory)
+	if err != nil {
+		return ReleaseAllResult{}, err
+	}
+	var res ReleaseAllResult
 	err = s.Config.Coordinator.WithLock(ctx, func() error {
 		current, err := Directory(directory)
 		if err != nil {
@@ -46,28 +63,32 @@ func (s Store) Release(ctx context.Context, directory, service string) (ReleaseR
 		if err != nil {
 			return err
 		}
-		res.Directory = key
-		port := r[key][service]
-		if port == 0 {
-			return fmt.Errorf("%w for service %q in %q", ErrNotFound, service, key)
-		}
-		probe := s.Probe
-		if probe == nil {
-			probe = Available
-		}
-		available, err := probe(ctx, port)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrUnavailable, err)
-		}
-		if !available {
-			return fmt.Errorf("%w: %d", ErrUnavailable, port)
+		var ports []int
+		if all {
+			for _, port := range r[key] {
+				ports = append(ports, port)
+			}
+			if len(ports) == 0 {
+				return fmt.Errorf("%w in %q", ErrNotFound, key)
+			}
+			sort.Ints(ports)
+		} else {
+			port := r[key][service]
+			if port == 0 {
+				return fmt.Errorf("%w for service %q in %q", ErrNotFound, service, key)
+			}
+			ports = []int{port}
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		delete(r[key], service)
-		if len(r[key]) == 0 {
+		if all {
 			delete(r, key)
+		} else {
+			delete(r[key], service)
+			if len(r[key]) == 0 {
+				delete(r, key)
+			}
 		}
 		data, err := encode(r)
 		if err != nil {
@@ -76,11 +97,11 @@ func (s Store) Release(ctx context.Context, directory, service string) (ReleaseR
 		if err := state.AtomicWrite(s.Config.Coordinator.Dir, File, data); err != nil {
 			return err
 		}
-		res.Port, res.Released = &port, true
+		res = ReleaseAllResult{Directory: key, Ports: ports, Released: len(ports)}
 		return nil
 	})
 	if err != nil {
-		return ReleaseResult{}, err
+		return ReleaseAllResult{}, err
 	}
 	return res, nil
 }

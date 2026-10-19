@@ -16,6 +16,7 @@ import (
 )
 
 type options struct {
+	installer     skillInstaller
 	output        string
 	defaultOutput string
 	configDir     string
@@ -115,6 +116,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	release := releaseCommand(o, out)
 	cleanup := cleanupCommand(o, out)
 	list := newListCommand(o, out)
+	install := installSkillsCommand(o)
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		// Cobra parses flags before help but intentionally skips Args. Validate
 		// this command's supplied operands too, permitting only missing operands.
@@ -130,7 +132,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 		// Explicit path flags were validated above. Repair commands can bypass
 		// a broken saved pointer just as their execution does.
 		var err error
-		if cmd != lookup && cmd != release && cmd != list && cmd != cleanup {
+		if cmd != lookup && cmd != release && cmd != list && cmd != cleanup && cmd != install {
 			var l config.Location
 			l, err = config.DefaultLocation(o.configDir, o.configDirSet())
 			if err == nil && !repairHelp[cmd] {
@@ -256,7 +258,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(reserve.Flags().Lookup("directory"))
-	root.AddCommand(configCmd, lookup, reserve, list, release, cleanup)
+	root.AddCommand(configCmd, lookup, reserve, list, release, cleanup, install)
 	for _, cmd := range []*cobra.Command{root, configCmd, show, add, remove, path, get, set, reset, reserve, list} {
 		cmd.InitDefaultHelpFlag()
 	}

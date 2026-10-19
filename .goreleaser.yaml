@@ -18,6 +18,10 @@ archives:
     files:
       - README.md
       - docs/RELEASING.md
+      - docs/INSTALLING.md
+      - docs/REFERENCE.md
+      - docs/DEVELOPING.md
+      - docs/AGENT-SETUP.md
       - LICENSE
 checksum:
   name_template: checksums.txt

@@ -6,16 +6,37 @@ import json
 import os
 from pathlib import Path
 import platform
+import posixpath
 import re
 import struct
+import socket
 import subprocess
 import tarfile
 import tempfile
+from urllib.parse import unquote, urlsplit
 
 
 def require(condition, message):
     if not condition:
         raise RuntimeError(message)
+
+
+def verify_doc_links(documents):
+    """Check relative documentation links against the actual archive contents."""
+    for name, data in documents.items():
+        if not name.endswith(".md"):
+            continue
+        text = re.sub(r"```.*?```", "", data.decode("utf-8"), flags=re.S)
+        for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", text):
+            link = urlsplit(target)
+            if link.scheme or link.netloc:
+                continue
+            path = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(link.path))) if link.path else name
+            require(path in documents, f"broken packaged link: {name}: {target}")
+            if link.fragment:
+                headings = re.findall(r"^#+ (.+)$", documents[path].decode("utf-8"), re.M)
+                anchors = {re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-") for heading in headings}
+                require(unquote(link.fragment) in anchors, f"broken packaged anchor: {name}: {target}")
 
 
 def verify(dist, expected_version, commit):
@@ -40,7 +61,7 @@ def verify(dist, expected_version, commit):
     native = (platform.system().lower(), {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), platform.machine()))
     require(native in targets, f"unsupported smoke host {native}")
     root = Path(__file__).resolve().parent.parent
-    docs = {"README.md", "docs/RELEASING.md", "LICENSE"}
+    docs = {"README.md", "docs/RELEASING.md", "docs/INSTALLING.md", "docs/REFERENCE.md", "docs/DEVELOPING.md", "docs/AGENT-SETUP.md", "LICENSE"}
     with tempfile.TemporaryDirectory(prefix="portbook-artifact-") as temporary:
         temp = Path(temporary).resolve()
         binary = temp / "portbook"
@@ -53,8 +74,10 @@ def verify(dist, expected_version, commit):
                 require(len(members) == len(docs) + 1, f"unexpected member count: {name}")
                 require({m.name for m in members} == docs | {"portbook"}, f"unexpected members: {name}")
                 require(all(m.isfile() for m in members), "archives must contain only regular files")
-                for doc in docs:
-                    require(package.extractfile(doc).read() == (root / doc).read_bytes(), f"document mismatch: {doc}")
+                documents = {doc: package.extractfile(doc).read() for doc in docs}
+                for doc, content in documents.items():
+                    require(content == (root / doc).read_bytes(), f"document mismatch: {doc}")
+                verify_doc_links(documents)
                 member = package.getmember("portbook")
                 require(member.mode & 0o111 == 0o111 and not member.mode & 0o6000, "executable permissions")
                 data = package.extractfile(member).read()
@@ -86,6 +109,24 @@ def smoke(binary, temp, version, commit):
     require(run("--version") == f"portbook {version} (commit {commit})\n", "release version output mismatch")
     require("Usage:" in json.loads(run("--help"))["help"], "JSON help mismatch")
     require("Usage:" in run("--output", "table", "--help"), "table help mismatch")
+    require("claude-code" in json.loads(run("install-skills", "--help"))["help"], "installer help")
+    fake_bin = temp / "fake-bin"
+    fake_bin.mkdir()
+    previous_path = env.get("PATH")
+    env["PATH"] = str(fake_bin)
+    try:
+        require("install Node.js" in run("install-skills", code=1), "missing installer dependency")
+        fake_npx = fake_bin / "npx"
+        fake_npx.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\"\n")
+        fake_npx.chmod(0o700)
+        for agent in ("codex", "claude-code"):
+            expected = "\n".join(["--yes", "skills", "add", "sviatoslav/portbook-skills", "--skill", "portbook", "--global", "--agent", agent]) + "\n"
+            require(run("install-skills", "--agent", agent, "--output", "json") == expected, "installer argv/passthrough")
+    finally:
+        if previous_path is None:
+            env.pop("PATH", None)
+        else:
+            env["PATH"] = previous_path
     require(json.loads(run("list", "--all"))["bookings"] == [], "fresh list")
     for command in ("get", "reserve", "release"):
         missing = json.loads(run(command, code=2))["error"]
@@ -116,7 +157,12 @@ def smoke(binary, temp, version, commit):
     require(json.loads(run("config", "remove", "--all"))["changed"] == 16384, "explicit empty pool")
     require(run("get", "api", "--output", "json") == api, "empty-pool get")
     require(json.loads(run("reserve", "new", code=1))["error"]["code"] == "runtime_error", "empty pool must disable new allocations")
-    require(json.loads(run("release", "api"))["released"], "README release")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", int(api)))
+        listener.listen()
+        require(json.loads(run("release", "api"))["released"], "busy single release")
+        with socket.create_connection(listener.getsockname(), timeout=5):
+            pass
     before = registry.read_bytes()
     identity = registry.stat()
     for command in ("release", "get"):
@@ -125,6 +171,21 @@ def smoke(binary, temp, version, commit):
     require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "missing lifecycle command rewrote state")
     require(json.loads(run("release", "default"))["released"], "release default")
     require(json.loads(run("config", "add", "49152-65535"))["total"] == 16384, "custom pool")
+    busy = run("reserve", "busy")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", int(busy)))
+        listener.listen()
+        idle = run("reserve", "idle")
+        bulk = json.loads(run("release", "--all"))
+        require(bulk == {"command": "release", "all": True, "directory": str(temp), "ports": sorted([int(busy), int(idle)]), "released": 2}, "owner bulk release")
+        with socket.create_connection(listener.getsockname(), timeout=5):
+            pass
+        replacement = run("reserve", "replacement")
+        require(re.fullmatch(r"[0-9]+\n", replacement) and replacement != busy, "released busy port must be skipped")
+        run("release", "replacement")
+    before = registry.read_bytes()
+    require("reservation not found" in run("release", "--all", code=1), "missing bulk release")
+    require(registry.read_bytes() == before, "missing bulk release rewrote state")
     owner = temp / "owner"
     owner.mkdir()
     run("reserve", "abandoned", "--directory", str(owner))
