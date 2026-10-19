@@ -2,11 +2,11 @@
 
 [Back to README](../README.md) · [Installation](INSTALLING.md) · [Development](DEVELOPING.md)
 
-This reference describes the pending v0.2.0 source interface, including booking-only
-release and `release --all`. v0.2.0 is not tagged or published yet.
+This reference describes the v0.2.0 interface, including booking-only release
+and `release --all`. Check `portbook --version` against the installed binary.
 Published v0.1.0 has no top-level `get`, reuses existing bookings on `reserve`,
 and succeeds on missing `release`. It also selects `default` when the service is
-omitted. The development version requires an explicit service name.
+omitted. Version 0.2.0 requires an explicit service name.
 The `get` and strict lifecycle behavior below are not available in the v0.1.0
 Homebrew or binary release. Published v0.1.0 also requires port availability
 before release and does not support `release --all`.

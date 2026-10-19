@@ -9,8 +9,8 @@ portbook --version
 
 The published v0.1.0 binary has neither `get` nor `install-skills` and uses the
 older create-or-return lifecycle. The skill targets **Portbook 0.2.0 or newer**;
-v0.2.0 is being prepared but is not published yet. Until delivery, use an
-authorized compatible source build and verify its actual features:
+check the installed binary’s actual features. A compatible source build can
+also be checked directly:
 
 ```sh
 go build -o bin/portbook ./cmd/portbook

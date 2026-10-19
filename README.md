@@ -14,11 +14,10 @@ No Go installation is required. Homebrew and [release downloads](https://github.
 support macOS and Linux on Intel/AMD x86-64 and ARM64.
 See [installation, source builds, updates, and uninstalling](docs/INSTALLING.md).
 
-**Next release: v0.2.0 is being prepared and is not published yet.** These tables
-and examples describe its source interface; see the [release notes and migration](docs/RELEASING.md#v020-preparation-and-migration).
-Homebrew/downloads still provide **v0.1.0**: it lacks `get` and the skill installer,
-reuses existing reservations, allows omitted service names, and refuses busy-port
-release. Build this checkout to try the pending interface.
+These commands target **Portbook v0.2.0 or newer**. Check `portbook --version`
+and see the [release notes and migration](docs/RELEASING.md#v020-release-notes-and-migration)
+when upgrading from v0.1.0. Select an available version from
+[GitHub Releases](https://github.com/sviatoslav/portbook/releases).
 
 ## Commands
 

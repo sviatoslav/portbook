@@ -6,15 +6,14 @@ This guide covers local snapshot checks and intentional release publication.
 The public project uses the MIT license in `LICENSE`. Creating/pushing version
 tags and publishing releases require explicit user authorization.
 
-## v0.2.0 preparation and migration
+## v0.2.0 release notes and migration
 
-Status: **prepared in source, not tagged or published**. Published binaries and the
-Homebrew formula remain v0.1.0 until separately authorized delivery completes.
-The intended next tag is `v0.2.0`. GoReleaser injects the version and commit from
-that tag; checkout builds continue to report `dev`, and snapshots derive their
-label from Git history. No independent runtime version constant needs updating.
+The target tag is `v0.2.0`; check [GitHub Releases](https://github.com/sviatoslav/portbook/releases)
+for published assets. GoReleaser injects the version and commit from the tag;
+checkout builds continue to report `dev`, and snapshots derive their label from
+Git history. No independent runtime version constant needs updating.
 
-Release notes for the next version:
+Release notes:
 
 - Add read-only `get SERVICE`, which prints an existing reserved port.
 - Make `reserve SERVICE` create-only: existing bookings report an error. Missing
@@ -41,7 +40,7 @@ remain compatible; the missing-config pool stays 49152–65535.
 
 Before using the agent workflow, check both `--version` and scoped help against
 [the setup guide](AGENT-SETUP.md). The skill targets Portbook 0.2.0+; an authorized
-source build with the required features can be used while the release is pending.
+source build with the required features can also be used.
 
 ## Local snapshot verification
 
