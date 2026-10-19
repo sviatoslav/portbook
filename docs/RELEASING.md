@@ -6,6 +6,43 @@ This guide covers local snapshot checks and intentional release publication.
 The public project uses the MIT license in `LICENSE`. Creating/pushing version
 tags and publishing releases require explicit user authorization.
 
+## v0.2.0 preparation and migration
+
+Status: **prepared in source, not tagged or published**. Published binaries and the
+Homebrew formula remain v0.1.0 until separately authorized delivery completes.
+The intended next tag is `v0.2.0`. GoReleaser injects the version and commit from
+that tag; checkout builds continue to report `dev`, and snapshots derive their
+label from Git history. No independent runtime version constant needs updating.
+
+Release notes for the next version:
+
+- Add read-only `get SERVICE`, which prints an existing reserved port.
+- Make `reserve SERVICE` create-only: existing bookings report an error. Missing
+  single `release` targets now fail; the new `get` also fails when no booking exists.
+- Require explicit service names. Historical bookings named `default` remain
+  accessible by passing that literal name; no registry migration is performed.
+- Make `release SERVICE` delete booking records even while their ports are busy.
+  Add `release --all` for only the exact selected directory, preserving children
+  and other owners. Release never probes ports or stops listeners; allocation
+  still probes and skips externally occupied ports.
+- Add `install-skills [--agent codex|claude-code]` for the already published
+  Portbook skill. It requires Node.js/npm/npx and network access, preserves upstream
+  confirmation/stdio, and bounds installer process lifetime. Reinstallation can
+  replace user edits; no Portbook registry/config state is read or changed.
+- Provide a shorter README and package linked installation, reference, development,
+  release, and agent-setup guides with every macOS/Linux amd64/arm64 archive.
+
+For scripts upgrading from v0.1.0, reserve a named service once, then use
+`portbook get NAME` on subsequent starts. Replace unnamed calls with the intended
+name (or explicit `default` for historical bookings). Do not use unconditional
+`get || reserve` on arbitrary failures. Treat release as record deletion, not a
+listener shutdown or proof of OS availability. Existing pool and registry files
+remain compatible; the missing-config pool stays 49152–65535.
+
+Before using the agent workflow, check both `--version` and scoped help against
+[the setup guide](AGENT-SETUP.md). The skill targets Portbook 0.2.0+; an authorized
+source build with the required features can be used while the release is pending.
+
 ## Local snapshot verification
 
 Use Go matching `go.mod` (currently 1.26 or newer), Python 3.9 or newer, Git,

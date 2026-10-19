@@ -8,9 +8,9 @@ portbook --version
 ```
 
 The published v0.1.0 binary has neither `get` nor `install-skills` and uses the
-older create-or-return lifecycle. This guide describes unreleased source work
-based on the merged explicit-service lifecycle. Build from a checkout containing
-the installer change to try it now:
+older create-or-return lifecycle. The skill targets **Portbook 0.2.0 or newer**;
+v0.2.0 is being prepared but is not published yet. Until delivery, use an
+authorized compatible source build and verify its actual features:
 
 ```sh
 go build -o bin/portbook ./cmd/portbook
@@ -21,7 +21,8 @@ go build -o bin/portbook ./cmd/portbook
 
 This checkout supports the required named-service lifecycle, booking-only release,
 owner-scoped `release --all`, and the installer. Check version and scoped help
-when using another binary; published v0.1.0 cannot run this workflow. The reusable
+when using another binary; a version label alone is insufficient, and published
+v0.1.0 cannot run this workflow. The reusable
 skill is already published in the [skills repository](https://github.com/sviatoslav/portbook-skills)
 and can be installed independently. Use it only with a compatible Portbook build.
 

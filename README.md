@@ -14,11 +14,11 @@ No Go installation is required. Homebrew and [release downloads](https://github.
 support macOS and Linux on Intel/AMD x86-64 and ARM64.
 See [installation, source builds, updates, and uninstalling](docs/INSTALLING.md).
 
-**Version availability:** these tables and examples describe development sources,
-including booking-only release, `release --all`, and `install-skills`.
-Published **v0.1.0** (Homebrew/downloads) has no `get` or skill installer, reuses
-bookings on `reserve`, allows omitted services, and refuses release of busy ports.
-Build this source checkout for the development interface; see the installation guide.
+**Next release: v0.2.0 is being prepared and is not published yet.** These tables
+and examples describe its source interface; see the [release notes and migration](docs/RELEASING.md#v020-preparation-and-migration).
+Homebrew/downloads still provide **v0.1.0**: it lacks `get` and the skill installer,
+reuses existing reservations, allows omitted service names, and refuses busy-port
+release. Build this checkout to try the pending interface.
 
 ## Commands
 
