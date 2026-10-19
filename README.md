@@ -4,8 +4,8 @@ Portbook is a standalone Go CLI for cooperating coding agents on one machine.
 It configures an allowed TCP port pool and reserves ports for directory/service pairs.
 The pool starts empty.
 
-Configuration and single-service reservation are implemented. Listing, release,
-cleanup, batch reservations, and agent skills are future work. There is no
+Configuration, single-service reservation, and explicit conservative cleanup are implemented.
+Listing, release, batch reservations, and agent skills are future work. There is no
 daemon, proxy, database, heartbeat, or expiry mechanism.
 
 ## Build and install
@@ -30,6 +30,7 @@ local verification in this checkout was performed on macOS. Windows is untested.
 
 ```sh
 portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
+portbook cleanup [--dry-run]
 portbook config path get
 portbook config path set /absolute/path
 portbook config path reset
@@ -153,13 +154,71 @@ same temporary-file, file-sync, rename, and directory-sync protocol as config.
 As with config, a directory-sync error after rename reports failure after a
 committed replacement. Inspect the registry before retrying.
 
+## Cleaning abandoned bookings
+
+```sh
+portbook cleanup --dry-run
+portbook --output table cleanup
+```
+
+Cleanup scans only owner paths already recorded in the global registry. It removes
+an individual service booking only when its owner is confirmed missing and the
+saved TCP port can be bound using the same IPv4/IPv6 probe as reservation. An
+existing directory retains all bookings even when no service is listening. Busy,
+forbidden, unsupported, or otherwise uncertain ports retain their bookings.
+Cleanup does not consult the pool or saved configuration pointer; corrupt pool or
+pointer data does not prevent cleanup. An explicitly supplied `--config-dir` still
+must pass normal flag/path validation, but never relocates the registry.
+
+Deletion evidence requires a missing final path component, an accessible immediate
+parent, no symlink components, and a recognized local filesystem. Missing ancestors,
+permission failures, replacement files, new or dangling symlinks, network or unknown
+filesystems, and paths under `/Volumes`, `/mnt`, `/media`, or `/run/media` are retained.
+If a whole parent tree was removed, cleanup conservatively retains its bookings.
+Local filesystem recognition covers APFS/HFS on macOS and ext, XFS, Btrfs, tmpfs,
+overlay, and ramfs on Linux. Other filesystems are reported as uncertain.
+
+This is path-based evidence, not a volume-history detector: a registry stores no
+mount identity. An arbitrary custom mount that disappears can expose an accessible
+local parent indistinguishable from an ordinary deletion. Run cleanup only when such
+volumes are available; standard removable mount roots
+and missing ancestors are always skipped. Filesystem changes and unmanaged binds
+can also race the checks. Cleanup records ancestor filesystem identities, rechecks after probing, and
+revalidates proposed owners after all probes before saving. A replaced parent
+retains its bookings as uncertain. These checks cannot
+provide a universal deletion or future port-availability guarantee.
+
+`--dry-run` is read-only, including before installation: it creates no registry,
+directory, or lock and preserves registry bytes. It previews a snapshot; a later
+cleanup checks again. Actual cleanup acquires the shared global lock once around
+registry read, owner checks, probes, and atomic save. It never rewrites the registry
+when no booking is removed. Retained entries stay intact; an owner map is removed
+only after its final booking is removed. Corrupt registries fail closed and retain
+all original evidence. There is no cleanup during reserve, expiry, process killing,
+owner-directory deletion, force flag, or scheduling.
+
+Rows are sorted by directory then service. JSON success always has `command`,
+`dry_run`, `rows` (including `[]` when empty), `removed`, `would_remove`, and
+`retained`. Counts refer to service bookings. Each row has `directory`, `service`,
+`port`, `action` (`removed`, `would-remove`, or `retained`), and `reason`:
+`owner_missing`, `owner_exists`, `owner_not_directory`, `owner_uncertain`,
+`port_busy_or_unavailable`, or `port_unknown`. Table identities are quoted and
+escape control characters, line separators, and bidirectional formatting; JSON
+preserves the original values. Per-owner/port uncertainty is a
+successful conservative skip; registry, lock, save, and output failures use the
+normal error schema and exit codes. For example:
+
+```json
+{"command":"cleanup","dry_run":true,"rows":[{"directory":"/projects/deleted-app","service":"server","port":50000,"action":"would-remove","reason":"owner_missing"}],"removed":0,"would_remove":1,"retained":0}
+```
+
 ## Output and exit codes
 
 `reserve` success always writes only a decimal port plus newline, on terminals
 and pipes and even with `--output json` or `--output table`. Its help and errors
 follow the normal format rules below.
 
-For configuration commands, terminal stdout is human-readable text/tables.
+For configuration and cleanup commands, terminal stdout is human-readable text/tables.
 When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
 `--output json` overrides this anywhere in the command; `--output=json` also
 works. `--help` / `-h` describes commands and examples and follows this convention
@@ -169,8 +228,8 @@ Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
 and `--all` mixed with operands still fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
 can appear before or after the command path; `--all` belongs to `ranges remove`
-and `--directory` belongs to `reserve`.
-Repeated `--output`, `--config-dir`, `--directory`, or `--all` flags are rejected. `--` ends flag parsing, so
+`--directory` belongs to `reserve`, and `--dry-run` belongs to `cleanup`.
+Repeated `--output`, `--config-dir`, `--directory`, `--dry-run`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config ranges add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
 
