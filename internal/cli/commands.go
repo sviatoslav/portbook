@@ -98,6 +98,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root.RunE = requireSubcommand
 	repairHelp := map[*cobra.Command]bool{}
 	release := releaseCommand(o, out)
+	cleanup := cleanupCommand(o, out)
 	list := newListCommand(o, out)
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		// Cobra parses flags before help but intentionally skips Args. Validate
@@ -110,11 +111,11 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = err
 			return
 		}
-		// List and release use only the fixed registry, including for help.
+		// List, release, and cleanup use only the fixed registry, including for help.
 		// Explicit path flags were validated above. Repair commands can bypass
 		// a broken saved pointer just as their execution does.
 		var err error
-		if cmd != release && cmd != list {
+		if cmd != release && cmd != list && cmd != cleanup {
 			var l config.Location
 			l, err = config.DefaultLocation(o.configDir, o.configDirSet())
 			if err == nil && !repairHelp[cmd] {
@@ -262,7 +263,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(reserve.Flags().Lookup("directory"))
-	root.AddCommand(configCmd, reserve, list, release)
+	root.AddCommand(configCmd, reserve, list, release, cleanup)
 	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset, reserve, list} {
 		cmd.InitDefaultHelpFlag()
 	}

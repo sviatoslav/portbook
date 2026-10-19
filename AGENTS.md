@@ -1,8 +1,8 @@
 # Portbook development
 
-- Current scope is configuration, single-service `reserve` and `release`, and
-  read-only `list`. Add cleanup, batch reservations, or other features only when
-  explicitly requested.
+- Current scope is configuration, single-service `reserve` and `release`,
+  read-only `list`, and explicit `cleanup`. Add batch reservations or other
+  features only when explicitly requested.
 - Release removes one booking only after the shared TCP probe proves availability.
   Occupied or uncertain ports fail without saving. Missing bookings succeed without
   creating or rewriting the registry. Use the fixed coordinator without reading
@@ -42,3 +42,13 @@
   independent-process concurrency coverage. Run targeted regressions after fixes,
   then `go test ./...`, `go test -race ./...`, `go vet ./...`, and a CLI build.
   Do not claim Linux runtime or CI results unless actually executed.
+
+- Cleanup checks only recorded owners and removes only confirmed missing owners
+  with bindable TCP ports. Retain existing, inaccessible, changed-symlink,
+  replacement-file, missing-ancestor, mount-root, and other uncertain owners;
+  retain busy/unknown ports. Never infer deletion merely from a failed Stat.
+  Dry runs create no directories/files/locks. Actual cleanup reads/checks/saves
+  under one global lock, independent of pool/pointer selection; no-op cleanup
+  must not rewrite registry bytes. Preserve preexisting empty owner maps.
+- Cleanup must retain proposals when ancestor filesystem identities change and
+  revalidate all proposed owners after probing, before deleting snapshot entries.
