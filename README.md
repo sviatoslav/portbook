@@ -15,14 +15,23 @@ $ portbook reserve web
 49153
 ```
 
-[Install from source](#build-or-install-from-source) (Go 1.26+).
+[Install Portbook](#installation).
 
 ## Installation
 
 The public repository is available now under the [MIT License](#license).
-Source installation is available now. Binary downloads and versioned source
-installation require a published release, listed on the
-[GitHub Releases page](https://github.com/sviatoslav/portbook/releases).
+[v0.1.0 is available](https://github.com/sviatoslav/portbook/releases/tag/v0.1.0).
+Install with Homebrew, download a binary, or build from source.
+
+### Homebrew
+
+```sh
+brew install sviatoslav/tap/portbook
+portbook --version
+```
+
+The [tap](https://github.com/sviatoslav/homebrew-tap) selects the released binary
+for macOS or Linux on x86-64 or ARM64. No Go toolchain is required.
 
 ### Download a release
 
@@ -44,11 +53,10 @@ subject to macOS security checks.
 Open the
 [GitHub Releases page](https://github.com/sviatoslav/portbook/releases), select a
 specific version, and download its matching archive and `checksums.txt` into a
-new temporary download directory. Published public release assets will be
-downloadable without signing in.
+new temporary download directory. Release assets are public and can be
+downloaded without signing in.
 
-The following example targets `v0.1.0` on macOS arm64. Use it once that release
-is listed on GitHub.
+The following example uses `v0.1.0` on macOS arm64.
 Replace the version and archive suffix using the table. Run these commands from
 the directory containing the two downloads. Stop if checksum verification fails:
 
@@ -86,17 +94,23 @@ go install ./cmd/portbook
 ```
 
 `go install` writes to `GOBIN`, or `$(go env GOPATH)/bin` when GOBIN is unset.
-Add that directory to PATH. After a public version tag exists, an example tagged
-source install is:
+Add that directory to PATH. To install a specific published version from source:
 
 ```sh
 # Choose a published version tag.
 go install github.com/sviatoslav/portbook/cmd/portbook@v0.1.0
 ```
 
-Versioned source installation requires the selected tag to be published.
-
 ### Update or uninstall
+
+For a Homebrew installation:
+
+```sh
+brew update
+brew upgrade sviatoslav/tap/portbook
+# To uninstall:
+brew uninstall portbook
+```
 
 To update a downloaded binary, download a chosen newer version, verify its
 checksum, and repeat the install command into the same PATH directory. For a
@@ -110,7 +124,7 @@ rm "$HOME/.local/bin/portbook"
 ```
 
 For a Go installation, remove the binary from your GOBIN/Go binary directory.
-Uninstalling removes only the executable. Config, the saved config selection,
+Uninstalling removes the installed program files. Config, the saved config selection,
 and bookings remain in the locations documented below; no automatic data
 cleanup or migration occurs.
 
