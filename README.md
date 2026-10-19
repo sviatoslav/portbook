@@ -38,10 +38,10 @@ agent skills are future work.
 
 ## Installation
 
-The first release, `v0.1.0`, is being prepared. The repository is currently private;
-access is required to clone it or download private release assets. No public
-release assets or tags are promised by the examples below. Public availability
-remains an owner decision. The project is licensed under MIT; see [License](#license).
+The public repository is available now under the [MIT License](#license).
+The first release, `v0.1.0`, is being prepared; its tag and downloadable assets
+have not been published. The download and tagged-install commands below become
+available after that release.
 
 ### Download a release (after the first release)
 
@@ -63,8 +63,8 @@ subject to macOS security checks.
 After a release exists, open the
 [GitHub Releases page](https://github.com/sviatoslav/portbook/releases), select a
 specific version, and download its matching archive and `checksums.txt` into a
-new temporary download directory. Private assets require signing in with repository
-access; public unauthenticated downloads work only after a public release exists.
+new temporary download directory. Published public release assets will be
+downloadable without signing in.
 
 The following is an example **after** `v0.1.0` is published, for macOS arm64.
 Replace the version and archive suffix using the table. Run these commands from
@@ -113,8 +113,7 @@ go install github.com/sviatoslav/portbook/cmd/portbook@v0.1.0
 ```
 
 The module path is prepared for this command; remote tagged installation cannot
-be verified until an accessible tag is published. Private source installation
-requires your own Git authentication and private Go module configuration.
+be verified until the tag is published.
 
 ### Update or uninstall
 
