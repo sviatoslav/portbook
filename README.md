@@ -1,40 +1,13 @@
 # Portbook
 
-Portbook gives your projects and coding agents stable local TCP ports.
+Stable local ports for your projects and coding agents.
 
-## Ports, ready to use
+[Install from source](#build-or-install-from-source) (Go 1.26+), then:
 
-Ask for a port from your project directory:
-
-```sh
-portbook reserve                  # 49152
-portbook reserve api              # 49153
-portbook reserve api              # 49153 again
-portbook list                     # see this project's bookings
-portbook release api              # release it after stopping your server
+```console
+$ portbook reserve
+49152
 ```
-
-Works out of the box with 16,384 candidate ports (49152–65535). Busy or already
-booked ports are skipped. Numbers above are illustrative; new reservations use
-the lowest available allowed port. Customize the pool only if needed.
-
-A booking belongs to your current directory and service name (`default`
-when omitted); asking again reuses the same port. Projects share one registry,
-so they avoid each other's booked ports. Run from another directory for another
-project, or use `--directory /absolute/project/path`.
-
-`reserve` prints just the port, ready for a script or coding agent:
-
-```sh
-PORT=$(portbook reserve api)
-```
-
-Start with [installation](#installation): source builds work from an accessible
-checkout today; downloadable binaries are planned for the first release.
-
-Portbook also provides conservative `cleanup` for abandoned bookings. It runs
-without a daemon, proxy, database, heartbeat, or expiry. Batch reservations and
-agent skills are future work.
 
 ## Installation
 
@@ -135,6 +108,37 @@ cleanup or migration occurs.
 
 Maintainers: see [release preparation and publication](docs/RELEASING.md) for
 local snapshot checks, CI gates, and future intentional tag steps.
+
+## Usage
+
+Ask for a port from your project directory:
+
+```sh
+portbook reserve                  # 49152
+portbook reserve api              # 49153
+portbook reserve api              # 49153 again
+portbook list                     # see this project's bookings
+portbook release api              # release it after stopping your server
+```
+
+Works out of the box with 16,384 candidate ports (49152–65535). Busy or already
+booked ports are skipped. Numbers above are illustrative; new reservations use
+the lowest available allowed port. Customize the pool only if needed.
+
+A booking belongs to your current directory and service name (`default`
+when omitted); asking again reuses the same port. Projects share one registry,
+so they avoid each other's booked ports. Run from another directory for another
+project, or use `--directory /absolute/project/path`.
+
+`reserve` prints just the port, ready for a script or coding agent:
+
+```sh
+PORT=$(portbook reserve api)
+```
+
+Portbook also provides conservative `cleanup` for abandoned bookings. It runs
+without a daemon, proxy, database, heartbeat, or expiry. Batch reservations and
+agent skills are future work.
 
 ## Commands
 
