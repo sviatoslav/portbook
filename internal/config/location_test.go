@@ -194,7 +194,7 @@ func TestRelocatedMutationsShareLockAndResolveAfterAcquisition(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	data := []byte(`{"version":1,"directory":` + `"` + second + `"}`)
-	if err := atomicWrite(l.Coordinator.Dir, LocationFile, data); err != nil {
+	if err := state.AtomicWrite(l.Coordinator.Dir, LocationFile, data); err != nil {
 		t.Fatal(err)
 	}
 	if err := lock.Unlock(); err != nil {
@@ -484,7 +484,7 @@ func TestPointerUnicodeAndLiteralEscapesRemainSupported(t *testing.T) {
 
 func TestBootstrapFilesCannotBecomeConfigDirectories(t *testing.T) {
 	l := testLocation(t)
-	for _, name := range []string{LocationFile, "state.lock", "LOCATION.JSON"} {
+	for _, name := range []string{LocationFile, "state.lock", "LOCATION.JSON", "bookings.json", "BOOKINGS.JSON"} {
 		for _, tail := range []string{"", "nested"} {
 			target := filepath.Join(l.Coordinator.Dir, name, tail)
 			if _, err := l.Change(context.Background(), target); err == nil {
@@ -511,7 +511,7 @@ func TestBootstrapFileAliasesCannotBecomeConfigDirectories(t *testing.T) {
 	if err := os.Symlink(l.Coordinator.Dir, alias); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{LocationFile, "state.lock", "LOCATION.JSON"} {
+	for _, name := range []string{LocationFile, "state.lock", "LOCATION.JSON", "bookings.json", "BOOKINGS.JSON"} {
 		target := filepath.Join(alias, name, "nested")
 		if _, err := l.Change(context.Background(), target); err == nil {
 			t.Fatalf("saved bootstrap file alias %s", target)

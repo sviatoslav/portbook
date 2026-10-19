@@ -1,21 +1,31 @@
 package cli
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/spf13/cobra"
+)
 
 // diagnosticOutput recovers only the output selection: Cobra can stop parsing
 // before reaching it on usage errors. It does not resolve commands, validate
 // flags, or affect execution; Cobra remains authoritative for all of those.
 // Stop at -- and retain the first selection, matching onceValue on duplicates.
 // An invalid or missing first value falls back to the terminal default.
-func diagnosticOutput(args []string, fallback string) string {
+func diagnosticOutput(args []string, fallback string, cmd *cobra.Command) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if arg == "--config-dir" {
-			if i+1 < len(args) && args[i+1] == "--" {
-				return fallback
+		// A known value-taking flag consumes its next token even if that token looks
+		// like --output. Use Cobra's resolved command and flag metadata so local
+		// flags do not consume diagnostic selections on unrelated commands.
+		if name, long := strings.CutPrefix(arg, "--"); long && name != "output" {
+			flag := cmd.Flag(name)
+			if flag != nil && flag.NoOptDefVal == "" {
+				if i+1 < len(args) && args[i+1] == "--" {
+					return fallback
+				}
+				i++
+				continue
 			}
-			i++
-			continue
 		}
 		if arg == "--" {
 			break

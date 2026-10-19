@@ -1,5 +1,5 @@
 // Package state owns the per-user state directory and its shared mutation lock.
-// It does not read or write configuration or registry data.
+// Coordinator does not read or write configuration or registry data.
 package state
 
 import (

@@ -26,7 +26,7 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer, termina
 	var helpErr error
 	root := newCommandTree(options, out, &helpErr)
 	root.SetArgs(append([]string{}, args...))
-	err := root.ExecuteContext(ctx)
+	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {
 		err = helpErr
 	}
@@ -38,5 +38,5 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer, termina
 	if errors.As(err, &classified) {
 		code, status = classified.code, 1
 	}
-	return fail(diagnostics, diagnosticOutput(args, output), code, err, status)
+	return fail(diagnostics, diagnosticOutput(args, output, cmd), code, err, status)
 }

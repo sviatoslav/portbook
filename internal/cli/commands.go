@@ -3,11 +3,14 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"portbook/internal/booking"
 	"portbook/internal/config"
 	"portbook/internal/ports"
 )
@@ -77,8 +80,8 @@ func once(flag *pflag.Flag) { flag.Value = &onceValue{Value: flag.Value, name: f
 func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "portbook",
-		Short:         "Configure the set of allowed TCP ports",
-		Long:          "Portbook configures a set of allowed TCP ports. No booking commands exist yet.\n\nSelect configuration with --config-dir, PORTBOOK_CONFIG_DIR, a saved choice, or the OS default.\nThe shared lock remains in the OS default directory.\nExit codes: 0 success; 1 storage/runtime error; 2 usage error.",
+		Short:         "Configure and reserve TCP ports",
+		Long:          "Portbook configures and reserves TCP ports for directory/service identities.\n\nSelect configuration with --config-dir, PORTBOOK_CONFIG_DIR, a saved choice, or the OS default.\nThe shared lock remains in the OS default directory.\nExit codes: 0 success; 1 storage/runtime error; 2 usage error.",
 		SilenceErrors: true, SilenceUsage: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
@@ -200,8 +203,60 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	repairHelp[set], repairHelp[reset] = true, true
 	path.AddCommand(get, set, reset)
 	configCmd.AddCommand(show, ranges, path)
-	root.AddCommand(configCmd)
-	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset} {
+	var owner, directory, service string
+	reserve := &cobra.Command{
+		Use: "reserve [SERVICE]", Short: "Reserve a TCP port for a directory and service (default: default)",
+		Long:    "Reserve the lowest available configured TCP port for a directory and service. Existing bookings are reused. Success always prints only the decimal port, even with --output json. The owner defaults to the current directory; Git roots are not detected.",
+		Example: "  portbook reserve server --directory /projects/my-app\n  portbook reserve",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 1 {
+				return fmt.Errorf("reserve accepts at most one service")
+			}
+			service = "default"
+			if len(args) == 1 {
+				service = args[0]
+			}
+			if err := booking.ValidateService(service); err != nil {
+				return err
+			}
+			selected := directory
+			if !cmd.Flags().Changed("directory") {
+				var err error
+				selected, err = os.Getwd()
+				if err != nil {
+					return &commandError{code: "runtime_error", err: err}
+				}
+			}
+			var err error
+			owner, err = booking.Directory(selected)
+			return err
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := o.validate(); err != nil {
+				return err
+			}
+			cfg, err := config.WithOverride(o.configDir, o.configDirSet())
+			if err != nil {
+				return &commandError{code: "storage_error", err: err}
+			}
+			port, err := (booking.Store{Config: cfg}).Reserve(cmd.Context(), owner, service)
+			if err != nil {
+				code := "storage_error"
+				if errors.Is(err, booking.ErrExhausted) {
+					code = "runtime_error"
+				}
+				return &commandError{code: code, err: err}
+			}
+			if _, err := fmt.Fprintf(out, "%d\n", port); err != nil {
+				return &commandError{code: "runtime_error", err: err}
+			}
+			return nil
+		},
+	}
+	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
+	once(reserve.Flags().Lookup("directory"))
+	root.AddCommand(configCmd, reserve)
+	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset, reserve} {
 		cmd.InitDefaultHelpFlag()
 	}
 	return root
