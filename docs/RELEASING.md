@@ -72,7 +72,8 @@ on all four runners. Only after every gate succeeds does `gh release create
 or creating another tag. SemVer prerelease tags produce prereleases. Only this
 last job has `contents: write`; other jobs use `contents: read`. Pull requests and
 master pushes produce CI snapshot artifacts only, retained for seven days.
-No separate release secret, Homebrew tap, or installer service is needed.
+The release job uses the built-in GitHub token; it needs no separate release
+secret. The Homebrew formula is updated separately after publication.
 
 Do not run `goreleaser release` without `--snapshot` or `--skip=publish` locally:
 it can publish. If checks fail, inspect the failed job and repair the candidate;
@@ -84,3 +85,15 @@ download/verify the checksums as described in README.md.
 Configuration reference: [GoReleaser quick start](https://goreleaser.com/getting-started/quick-start/),
 [archives](https://goreleaser.com/customization/package/archives/), and
 [snapshots](https://goreleaser.com/customization/publish/snapshots/).
+
+## Updating the Homebrew tap
+
+After verifying the public release assets, update `Formula/portbook.rb` in
+[sviatoslav/homebrew-tap](https://github.com/sviatoslav/homebrew-tap) with the four
+actual asset URLs and matching values from `checksums.txt`. Keep the MIT metadata
+and the isolated functional test. Run `brew style sviatoslav/tap/portbook`,
+`brew audit --strict --online --os=all --arch=all sviatoslav/tap/portbook`, and
+`brew test sviatoslav/tap/portbook` after installation. Push the formula and verify
+the tap's native installation CI on all four targets before announcing Homebrew
+availability. The Portbook release workflow does not push to the tap or store a
+cross-repository credential.
