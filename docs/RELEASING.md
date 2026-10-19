@@ -2,9 +2,9 @@
 
 Release preparation is local and nonpublishing. Publication is a separate,
 intentional step. No release has been published by this preparation slice.
-Choose a license and decide repository visibility before the first public release;
-there is currently no license file. Do not describe the project as open source
-until that decision is made. Private repository releases require repository access.
+The selected first release is v0.1.0, and the project uses the MIT license in
+`LICENSE`. Repository visibility and publication authorization remain separate
+decisions before a public release. Private repository releases require repository access.
 
 ## Local snapshot verification
 
@@ -50,7 +50,7 @@ CI results are evidence only after the workflow actually runs.
 ## Future intentional tag release
 
 Do this only after explicit publication authorization, with the release changes
-merged, a clean checkout, first-release license/visibility decisions resolved,
+merged, a clean checkout, first-release visibility decided, the MIT license included in every archive,
 and passing candidate checks. The selected first release version is `v0.1.0`;
 it is not yet a published release or an existing tag. Selecting this version does
 not authorize creating or pushing the tag. The current module path supports v0/v1;

@@ -65,7 +65,8 @@
   after release changes. Smoke data must use temporary HOME/XDG/config/owner
   paths. Distinguish cross-builds, local native execution, and actual CI results.
   Keep build/dist output ignored. Review installation examples against assets;
-  do not claim unpublished versions exist or invent a project license.
+  do not claim unpublished versions exist. Include the existing MIT LICENSE in
+  every archive and preserve its standard text and copyright notice.
 - Follow `docs/RELEASING.md`; tags, pushes, releases, visibility/license changes,
   and Homebrew work need explicit user authorization. Preparation alone does not
   authorize publication. Perform a fresh local review after verification and

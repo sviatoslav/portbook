@@ -41,7 +41,7 @@ agent skills are future work.
 The first release, `v0.1.0`, is being prepared. The repository is currently private;
 access is required to clone it or download private release assets. No public
 release assets or tags are promised by the examples below. Public availability
-and a project license remain owner decisions; this checkout has no license file.
+remains an owner decision. The project is licensed under MIT; see [License](#license).
 
 ### Download a release (after the first release)
 
@@ -637,3 +637,7 @@ state operations can use the same coordinator without opening or rewriting
 configuration. Callbacks must never reacquire this lock or call another locking
 operation. The coordinator provides serialization, not automatic rollback of
 arbitrary callback writes or a transaction spanning multiple files.
+
+## License
+
+Portbook is available under the [MIT License](LICENSE).

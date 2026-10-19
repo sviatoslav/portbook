@@ -40,7 +40,7 @@ def verify(dist, expected_version, commit):
     native = (platform.system().lower(), {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine(), platform.machine()))
     require(native in targets, f"unsupported smoke host {native}")
     root = Path(__file__).resolve().parent.parent
-    docs = {"README.md", "docs/RELEASING.md"} | {p.name for p in root.glob("LICENSE*") if p.is_file()}
+    docs = {"README.md", "docs/RELEASING.md", "LICENSE"}
     with tempfile.TemporaryDirectory(prefix="portbook-artifact-") as temporary:
         temp = Path(temporary).resolve()
         binary = temp / "portbook"
