@@ -97,7 +97,9 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root.Args = groupArgs
 	root.RunE = requireSubcommand
 	repairHelp := map[*cobra.Command]bool{}
+	release := releaseCommand(o, out)
 	cleanup := cleanupCommand(o, out)
+	list := newListCommand(o, out)
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		// Cobra parses flags before help but intentionally skips Args. Validate
 		// this command's supplied operands too, permitting only missing operands.
@@ -109,25 +111,27 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = err
 			return
 		}
-		// Resolve paths for help too, but allow explicit repair commands to bypass
-		// a broken saved pointer just as their execution does. Cleanup has no
-		// selected configuration; explicit path flags were validated above.
-		if cmd != cleanup {
-			l, err := config.DefaultLocation(o.configDir, o.configDirSet())
+		// List, release, and cleanup use only the fixed registry, including for help.
+		// Explicit path flags were validated above. Repair commands can bypass
+		// a broken saved pointer just as their execution does.
+		var err error
+		if cmd != release && cmd != list && cmd != cleanup {
+			var l config.Location
+			l, err = config.DefaultLocation(o.configDir, o.configDirSet())
 			if err == nil && !repairHelp[cmd] {
 				_, err = l.Resolve()
 			}
-			if err != nil {
-				*helpErr = &commandError{code: "storage_error", err: err}
-				return
-			}
+		}
+		if err != nil {
+			*helpErr = &commandError{code: "storage_error", err: err}
+			return
 		}
 		text := cmd.Long
 		if text == "" {
 			text = cmd.Short
 		}
 		text += "\n\n" + cmd.UsageString()
-		var err error
+		err = nil
 		if o.format() == "json" {
 			err = json.NewEncoder(out).Encode(struct {
 				Command string `json:"command"`
@@ -259,8 +263,8 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	reserve.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(reserve.Flags().Lookup("directory"))
-	root.AddCommand(configCmd, reserve, cleanup)
-	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset, reserve} {
+	root.AddCommand(configCmd, reserve, list, release, cleanup)
+	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset, reserve, list} {
 		cmd.InitDefaultHelpFlag()
 	}
 	return root

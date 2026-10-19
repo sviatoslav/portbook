@@ -4,8 +4,9 @@ Portbook is a standalone Go CLI for cooperating coding agents on one machine.
 It configures an allowed TCP port pool and reserves ports for directory/service pairs.
 The pool starts empty.
 
-Configuration, single-service reservation, and explicit conservative cleanup are implemented.
-Listing, release, batch reservations, and agent skills are future work. There is no
+Configuration, single-service reservation, read-only listing, conservative
+single-booking release, and explicit cleanup are implemented. Batch reservations
+and agent skills are future work. There is no
 daemon, proxy, database, heartbeat, or expiry mechanism.
 
 ## Build and install
@@ -30,6 +31,8 @@ local verification in this checkout was performed on macOS. Windows is untested.
 
 ```sh
 portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
+portbook release [SERVICE] [--directory ABSOLUTE_DIRECTORY]
+portbook list [--directory ABSOLUTE_DIRECTORY | --all]
 portbook cleanup [--dry-run]
 portbook config path get
 portbook config path set /absolute/path
@@ -125,7 +128,7 @@ conservatively. Exhaustion fails without changing bookings.
 Sockets are not held after probing. An unmanaged process can bind a port between
 the probe and your application's listen call; reservations coordinate cooperating
 Portbook callers and cannot prevent this OS race. Portbook never automatically
-switches, expires, or reclaims a booking. There is currently no release command.
+switches, expires, or reclaims a booking. Use explicit release for idle bookings.
 
 Bookings live in `bookings.json` beside `state.lock` in the fixed OS-standard
 Portbook directory: `~/Library/Application Support/portbook/bookings.json` on
@@ -153,6 +156,85 @@ the same lock. Success is emitted only after saving. Atomic replacement uses the
 same temporary-file, file-sync, rename, and directory-sync protocol as config.
 As with config, a directory-sync error after rename reports failure after a
 committed replacement. Inspect the registry before retrying.
+
+## Releasing a booking
+
+```sh
+portbook release server --directory /projects/my-app
+portbook release                     # literal service default, owner is cwd
+portbook --output table release server --directory /projects/my-app
+```
+
+`release` accepts at most one service and uses the same directory validation,
+canonical symlink/case aliases, service identity, and `--` rules as `reserve`.
+It removes only that booking, and removes its owner map when no services remain.
+A missing booking is an idempotent success: it does not create or rewrite
+`bookings.json`. Release may create the fixed coordination directory and lock.
+
+Release is conservative: it refuses with `runtime_error` if the booked port is
+occupied, forbidden, or cannot be proven available by the shared IPv4/IPv6 TCP
+probe. Stop your listener before releasing. It never kills processes or infers
+listener ownership. The check is an instant observation; unmanaged processes can
+bind after the probe. Every other booking is preserved, including absent owners.
+
+The fixed global lock covers registry read, owner matching, probing, and atomic
+save. Release does not read the selected pool or saved config pointer, so an
+out-of-pool booking remains releasable even with broken configuration. Explicit
+`--config-dir` flags still undergo normal path validation, including for help.
+Unused configuration environment values do not block release or its help. Corrupt registry data
+fails closed without modification, including on repeated release attempts.
+
+JSON success always has `command`, `directory`, `service`, nullable `port`, and
+`released`. A release reports the removed port; a no-op has `port: null` and
+`released: false`. Table output is a short `Released port ...` or `No booking ...`
+message. Success is printed only after the save completes.
+
+```json
+{"command":"release","directory":"/projects/my-app","service":"server","port":50000,"released":true}
+```
+
+```json
+{"command":"release","directory":"/projects/my-app","service":"server","port":null,"released":false}
+```
+
+## Listing bookings
+
+```sh
+portbook list
+portbook list --directory /projects/my-app
+portbook list --all --output json
+```
+
+`list` shows the current directory's bookings; `--directory` selects another
+existing accessible absolute directory using the same symlink/case identity rules
+as `reserve`. The default is cwd, including nested directories, without Git-root
+discovery. `--all` includes every stored owner path, even disappeared directories.
+`--all` and `--directory` cannot be combined, including `--all=false`.
+No positional operands are accepted.
+
+Listing displays saved bookings unchanged, including ports outside the configured
+pool and ports with active listeners. It does not probe sockets, infer process
+ownership, or read configuration or the saved config pointer. Config overrides
+never relocate the registry. Explicit global flags still undergo validation.
+Listing reads one complete atomic snapshot without acquiring the mutation lock
+and creates no directories or files, including on a fresh installation. A missing
+registry yields an empty list; malformed or inaccessible registries fail closed
+and remain untouched.
+
+Rows sort lexically by stored directory then service; scoped rows sort by service.
+Human output has `SERVICE`/`PORT` columns, with a leading `DIRECTORY` column for
+`--all`; an empty list prints `No bookings found.`. Names containing nonprinting
+characters, quotes, backslashes, or leading/trailing spaces are quoted and escaped in tables to keep
+bookings distinct and each booking on one row.
+JSON always includes the stored directory in each row, including scoped output:
+
+```json
+{"command":"list","bookings":[{"directory":"/projects/my-app","service":"server","port":50000}]}
+```
+
+```json
+{"command":"list","bookings":[]}
+```
 
 ## Cleaning abandoned bookings
 
@@ -218,17 +300,19 @@ normal error schema and exit codes. For example:
 and pipes and even with `--output json` or `--output table`. Its help and errors
 follow the normal format rules below.
 
-For configuration and cleanup commands, terminal stdout is human-readable text/tables.
+For configuration, list, release, and cleanup commands, terminal stdout is human-readable text/tables.
 When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
 `--output json` overrides this anywhere in the command; `--output=json` also
 works. `--help` / `-h` describes commands and examples and follows this convention
 (JSON help has `command` and `help` fields). Help is scoped to the resolved
 command: `portbook config ranges remove --help` describes removal and `--all`.
 Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
-and `--all` mixed with operands still fail with exit 2 when help is requested.
+`ranges remove --all` mixed with operands, and `list --all --directory` still
+fail with exit 2 when help is requested.
 Recognized commands can show help without required operands. Global `--output` and `--config-dir`
 can appear before or after the command path; `--all` belongs to `ranges remove`
-`--directory` belongs to `reserve`, and `--dry-run` belongs to `cleanup`.
+and `list`; `--directory` belongs to `reserve`, `list`, and `release`; and
+`--dry-run` belongs to `cleanup`.
 Repeated `--output`, `--config-dir`, `--directory`, `--dry-run`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config ranges add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
@@ -391,8 +475,9 @@ go vet ./...
 ```
 
 The integration suite builds the real executable and exercises independent
-processes, including concurrent additions, removals, location switches, and reservations. Tests use isolated
-temporary directories and never write to the normal user configuration.
+processes, including concurrent additions, removals, location switches,
+reservations, releases, cleanup, and list snapshots. Tests use isolated temporary directories
+and never write to the normal user configuration.
 
 The command tree uses [Cobra](https://cobra.dev/docs/how-to-guides/working-with-flags/)
 for scoped commands/help, inherited output flags, local flags, and standard flag
@@ -408,6 +493,10 @@ Code responsibilities:
 | `cmd/portbook` | Process exit and terminal detection |
 | `internal/cli/commands.go` | Command definitions, flags, operand validation, scoped help |
 | `internal/cli/execute.go` | Explicit config and path handlers |
+| `internal/cli/list.go` | Read-only list command, scoped validation, and rendering |
+| `internal/booking/list.go` | Sorted registry snapshots and scoped owner matching |
+| `internal/cli/cleanup.go` | Cleanup command, preview flag, and deterministic reports |
+| `internal/booking/cleanup.go` | Conservative owner evidence, probes, and locked cleanup |
 | `internal/cli/render.go` | Stable success/error JSON and table output |
 | `internal/ports` | Port parsing and set operations |
 | `internal/config/codec.go` | Versioned JSON encoding and fail-closed decoding |
