@@ -88,26 +88,15 @@ func TestReleaseNoopAndFailuresPreserveRegistry(t *testing.T) {
 	}
 	seedRelease(t, s, Registry{dir: {"default": 45000}})
 	before := contents(t, path)
-	for _, probe := range []func(context.Context, int) (bool, error){
-		func(context.Context, int) (bool, error) { return false, nil },
-		func(context.Context, int) (bool, error) { return false, errors.New("unknown TCP failure") },
-	} {
-		s.Probe = probe
-		if _, err := s.Release(context.Background(), dir, "default"); !errors.Is(err, ErrUnavailable) {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(before, contents(t, path)) {
-			t.Fatal("failure changed registry")
-		}
-	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s.Probe = func(context.Context, int) (bool, error) { cancel(); return true, nil }
+	cancel()
 	if _, err := s.Release(ctx, dir, "default"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(before, contents(t, path)) {
 		t.Fatal("cancel changed registry")
 	}
+
 	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
@@ -148,21 +137,28 @@ func TestReleaseRealOccupiedTCPFamilies(t *testing.T) {
 			}
 			defer l.Close()
 			port := l.Addr().(*net.TCPAddr).Port
-			s, dir := fixture(t)
+			s, dir := fixture(t, ports.Range{Start: port, End: port})
 			dir, _ = Directory(dir)
 			s.Probe = nil
 			path := seedRelease(t, s, Registry{dir: {"default": port}})
-			before := contents(t, path)
-			if _, err := s.Release(context.Background(), dir, "default"); !errors.Is(err, ErrUnavailable) {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(before, contents(t, path)) {
-				t.Fatal("occupied booking changed")
-			}
-			l.Close()
 			if res, err := s.Release(context.Background(), dir, "default"); err != nil || !res.Released {
 				t.Fatal(res, err)
 			}
+			if r, err := s.read(); err != nil || len(r) != 0 {
+				t.Fatal(r, err, string(contents(t, path)))
+			}
+			connection, err := net.DialTimeout(network, l.Addr().String(), time.Second)
+			if err != nil {
+				t.Fatal("release stopped listener", err)
+			}
+			connection.Close()
+			if p, err := s.Reserve(context.Background(), dir, "new"); p != 0 || !errors.Is(err, ErrExhausted) {
+				t.Fatal("reused released busy port", p, err)
+			}
+			if available, err := Available(context.Background(), port); err != nil || available {
+				t.Fatal("listener lost", available, err)
+			}
+
 		})
 	}
 }
@@ -171,20 +167,31 @@ func TestReleaseSerializesReserveAndConfig(t *testing.T) {
 	s, dir := fixture(t, ports.Range{Start: 45000, End: 45000})
 	dir, _ = Directory(dir)
 	path := seedRelease(t, s, Registry{dir: {"default": 45000}})
-	entered, proceed := make(chan struct{}), make(chan struct{})
-	s.Probe = func(context.Context, int) (bool, error) { close(entered); <-proceed; return true, nil }
+	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	if err := lock.Lock(); err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
 	done := make(chan error, 1)
-	go func() { _, err := s.Release(context.Background(), dir, "default"); done <- err }()
-	<-entered
+	// Give this release a longer wait than the competitors' deliberate timeouts.
+	waiting := s
+	waiting.Config.Coordinator.LockTimeout = time.Second
+	go func() { _, err := waiting.Release(context.Background(), dir, "default"); done <- err }()
+	select {
+	case err := <-done:
+		t.Fatal("release bypassed shared lock", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+
 	competitor := s
 	competitor.Probe = func(context.Context, int) (bool, error) { return true, nil }
 	if _, err := competitor.Reserve(context.Background(), dir, "other"); err == nil {
-		t.Error("reserve bypassed release lock")
+		t.Error("reserve bypassed shared lock")
 	}
-	if _, _, err := s.Config.Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config bypassed release lock"); return 0, nil }); err == nil {
+	if _, _, err := s.Config.Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config bypassed shared lock"); return 0, nil }); err == nil {
 		t.Error("config did not wait")
 	}
-	close(proceed)
+	lock.Unlock()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +203,7 @@ func TestReleaseSerializesReserveAndConfig(t *testing.T) {
 	}
 }
 
-func TestReleaseSaveErrorAndOwnerValidation(t *testing.T) {
+func TestReleaseOwnerValidation(t *testing.T) {
 	s, dir := fixture(t)
 	dir, _ = Directory(dir)
 	path := seedRelease(t, s, Registry{dir: {"default": 45000}})
@@ -208,28 +215,7 @@ func TestReleaseSaveErrorAndOwnerValidation(t *testing.T) {
 	if _, err := s.Release(context.Background(), dir, ""); err == nil {
 		t.Fatal("empty service accepted")
 	}
-	// Replace the registry entry after reading, forcing AtomicWrite's rename to fail.
-	s.Probe = func(context.Context, int) (bool, error) {
-		if err := os.Remove(path); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Mkdir(path, 0700); err != nil {
-			t.Fatal(err)
-		}
-		return true, nil
-	}
-	if res, err := s.Release(context.Background(), dir, "default"); err == nil || res.Released {
-		t.Fatal(res, err)
-	}
-	entries, err := os.ReadDir(s.Config.Coordinator.Dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.Name() != File && entry.Name() != "config.json" && entry.Name() != "state.lock" {
-			t.Fatal("temporary file leaked", entry.Name())
-		}
-	}
+
 }
 
 func TestReleaseRegistryAccessAndCaseAliases(t *testing.T) {
@@ -314,61 +300,32 @@ func TestReleaseDoesNotAdoptReplacedOwnerSymlink(t *testing.T) {
 	}
 }
 
-func TestReleaseSlowProbeCancellationPreservesSnapshotAndUnlocks(t *testing.T) {
+func TestReleaseCancellationPreservesSnapshotAndUnlocks(t *testing.T) {
 	s, dir := fixture(t)
-	dir, err := Directory(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir, _ = Directory(dir)
 	emptyOwner := filepath.Join(t.TempDir(), "missing-empty-owner")
 	path := seedRelease(t, s, Registry{dir: {"default": 45000}, emptyOwner: {}})
 	before := contents(t, path)
-	beforeInfo, err := os.Stat(path)
-	if err != nil {
+	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
-	entered := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s.Probe = func(ctx context.Context, _ int) (bool, error) {
-		close(entered)
-		<-ctx.Done()
-		// Even a probe returning success after cancellation cannot authorize removal.
-		return true, nil
-	}
-	done := make(chan error, 1)
-	go func() {
-		res, err := s.Release(ctx, dir, "default")
-		if res.Released || res.Port != nil {
-			err = errors.New("cancelled release exposed success")
-		}
-		done <- err
-	}()
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("probe not entered")
-	}
 	cancel()
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("cancelled release retained lock")
+	if res, err := s.Release(ctx, dir, "default"); !errors.Is(err, context.Canceled) || res.Released {
+		t.Fatal(res, err)
 	}
-	afterInfo, err := os.Stat(path)
-	if err != nil || !os.SameFile(beforeInfo, afterInfo) || !bytes.Equal(before, contents(t, path)) {
-		t.Fatal("cancellation changed registry", err)
+	lock.Unlock()
+	lock.Close()
+	if !bytes.Equal(before, contents(t, path)) {
+		t.Fatal("cancel changed snapshot")
 	}
-	s.Probe = func(context.Context, int) (bool, error) { return true, nil }
 	if res, err := s.Release(context.Background(), dir, "default"); err != nil || !res.Released {
-		t.Fatal("lock was not released", res, err)
+		t.Fatal("lock retained", res, err)
 	}
 	r, err := s.read()
 	if empty, ok := r[emptyOwner]; err != nil || !ok || len(empty) != 0 || len(r) != 1 {
-		t.Fatal("release discarded unrelated empty owner", r, err)
+		t.Fatal("unrelated empty owner lost", r, err)
 	}
 }
 
@@ -389,12 +346,10 @@ func TestReleaseUnwritableStatePreservesRegistryAndUnlocks(t *testing.T) {
 	}
 	root := s.Config.Coordinator.Dir
 	defer os.Chmod(root, 0700)
-	s.Probe = func(context.Context, int) (bool, error) {
-		if err := os.Chmod(root, 0500); err != nil {
-			t.Fatal(err)
-		}
-		return true, nil
+	if err := os.Chmod(root, 0500); err != nil {
+		t.Fatal(err)
 	}
+
 	res, err := s.Release(context.Background(), dir, "default")
 	if err == nil || !errors.Is(err, os.ErrPermission) || res.Released || res.Port != nil {
 		t.Fatal(res, err)

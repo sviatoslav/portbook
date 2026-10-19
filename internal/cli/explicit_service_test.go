@@ -110,7 +110,7 @@ func TestExplicitServiceHelpValidation(t *testing.T) {
 					t.Fatal(args, code, out.String(), diag.String())
 				}
 			}
-			for _, args := range [][]string{{command, "--directory=relative", "--help"}, {command, "", "--help"}, {command, "a", "b", "--help"}, {command, "--all", "--help"}, {command, "--output=yaml", "--help"}} {
+			for _, args := range [][]string{{command, "--directory=relative", "--help"}, {command, "", "--help"}, {command, "a", "b", "--help"}, {command, "api", "--all", "--help"}, {command, "--output=yaml", "--help"}} {
 				var out, diag bytes.Buffer
 				if code := Run(context.Background(), args, &out, &diag, terminal); code != 2 || out.Len() != 0 {
 					t.Fatal(args, code, out.String(), diag.String())

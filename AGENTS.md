@@ -1,12 +1,12 @@
 # Portbook development
 
-- Current scope is configuration, single-service `get`, `reserve`, and `release`,
+- Current scope is configuration, single-service `get`/`reserve`, owner-scoped `release`,
   read-only `list`, and explicit `cleanup`. Add batch reservations or other
   features only when explicitly requested.
-- Release removes one booking only after the shared TCP probe proves availability.
-  Occupied or uncertain ports fail without saving. Missing bookings fail without
-  creating or rewriting the registry. Use the fixed coordinator without reading
-  the selected pool or saved pointer; preserve every other booking.
+- Release deletes registry records without TCP probes or listener checks. A single
+  service or `--all` removes only the exact canonical owner's bookings, preserving
+  other owners and descendants. Missing bookings fail without creating or rewriting
+  the registry. Use the fixed coordinator without reading config or saved pointer.
 - List reads only the fixed registry snapshot, without config/pointer reads, locks,
   writes, or probes. Scoped listing uses reserve owner identity; `--all` retains
   disappeared owner paths. Sort by directory then service; keep empty JSON arrays.
@@ -15,11 +15,12 @@
   discovery. Get reads existing bookings even outside the pool or with a listener present,
   using only a registry snapshot without locks, config/pointer reads, writes, or
   probes. Duplicate reserve fails under the mutation lock without rewriting data.
-  Get/reserve/release require one explicit service; no implicit default. The
-  literal service `default` stays valid for existing bookings, without migration.
+  Get/reserve and single release require one explicit service; release --all
+  accepts no service. No implicit default. The literal service `default` stays
+  valid for existing bookings, without migration.
   New bookings require the lowest globally unbooked and OS-bindable TCP port.
 - Preserve the command paths, port-set semantics, table/JSON output, error schema,
-  and exit codes documented in README.md. Define commands and flags in Cobra;
+  and exit codes documented in docs/REFERENCE.md. Define commands and flags in Cobra;
   use explicit handlers rather than dispatching mutations by command strings.
 - Help is scoped. Resolve paths and validate applicable flags and supplied
   operands before rendering help; missing required operands may be omitted for
@@ -85,3 +86,11 @@
 - Pool commands are `config add`, `config remove`, and `config remove --all`,
   without an intermediate subcommand. Preserve set/range operands and scoped
   help/flag validation; keep structured command labels aligned with these paths.
+
+- Documentation navigation: README.md is the short user entry point; detailed
+  contracts live in docs/REFERENCE.md, installation in docs/INSTALLING.md, and
+  contributor guidance in docs/DEVELOPING.md. Keep release availability truthful.
+- Agent setup is documented in docs/AGENT-SETUP.md. Canonical skill source is
+  sviatoslav/portbook-skills, not this repository. install-skills delegates only
+  that skill to Vercel Skills CLI; preserve explicit agent targets, bounded
+  process-group cancellation, stdio passthrough, and state independence.

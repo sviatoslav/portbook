@@ -21,16 +21,20 @@ func serviceOwnerArgs(directory, owner, service *string) cobra.PositionalArgs {
 			}
 		}
 
-		selected := *directory
-		if !cmd.Flags().Changed("directory") {
-			var err error
-			selected, err = os.Getwd()
-			if err != nil {
-				return &commandError{code: "runtime_error", err: err}
-			}
-		}
 		var err error
-		*owner, err = booking.Directory(selected)
+		*owner, err = ownerDirectory(cmd, *directory)
 		return err
 	}
+}
+
+func ownerDirectory(cmd *cobra.Command, directory string) (string, error) {
+	selected := directory
+	if !cmd.Flags().Changed("directory") {
+		var err error
+		selected, err = os.Getwd()
+		if err != nil {
+			return "", &commandError{code: "runtime_error", err: err}
+		}
+	}
+	return booking.Directory(selected)
 }

@@ -107,7 +107,7 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	}
 }
 
-func TestReleaseCLIBusyAndCorruptionPreserveState(t *testing.T) {
+func TestReleaseCLIBusySucceedsAndCorruptionPreservesState(t *testing.T) {
 	cfg := t.TempDir()
 	root := registryRoot(t, cfg)
 	owner, _ := booking.Directory(t.TempDir())
@@ -120,15 +120,11 @@ func TestReleaseCLIBusyAndCorruptionPreserveState(t *testing.T) {
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 2; i++ {
-		if got := run(t, cfg, 1, "release", "default", "--directory", owner); !strings.Contains(got, `"code":"runtime_error"`) {
-			t.Fatal(got)
-		}
-		after, _ := os.ReadFile(path)
-		if !bytes.Equal(data, after) {
-			t.Fatal("busy booking changed")
-		}
+	res := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", owner))
+	if !res.Released || res.Port == nil || *res.Port != p[0] {
+		t.Fatal(res)
 	}
+
 	for _, bad := range []string{"broken", `{"version":2,"bookings":{}}`, `{"version":1,"bookings":{"/gone":{"x":1,"x":2}}}`} {
 		os.WriteFile(path, []byte(bad), 0600)
 		for i := 0; i < 2; i++ {
@@ -152,7 +148,7 @@ func TestReleaseCLIValidationAndFlagBoundaries(t *testing.T) {
 		{"release", "a", "b"}, {"release", ""}, {"release", "default", "--directory="},
 		{"release", "default", "--directory=relative"}, {"release", "default", "--directory", file},
 		{"release", "default", "--directory", filepath.Join(owner, "absent")},
-		{"release", "default", "--directory", owner, "--directory", owner}, {"release", "--all"},
+		{"release", "default", "--directory", owner, "--directory", owner}, {"release", "default", "--all"},
 		{"release", "--output=yaml"}, {"release", "--output=json", "--output=table"},
 		{"release", "a", "b", "--help"}, {"release", "default", "--directory=relative", "--help"},
 		{"release", "--config-dir=relative"}, {"release", "--unknown", "--output=json"},
