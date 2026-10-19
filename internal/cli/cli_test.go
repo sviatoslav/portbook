@@ -1,0 +1,41 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+)
+
+func TestTerminalDefaultAndOverride(t *testing.T) {
+	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
+	for _, tc := range []struct {
+		terminal bool
+		args     []string
+		want     string
+	}{
+		{true, []string{"config", "show"}, "No port ranges configured.\nTotal: 0 ports.\n"},
+		{false, []string{"config", "show"}, "{\"command\":\"config show\",\"ranges\":[],\"total\":0}\n"},
+		{false, []string{"config", "show", "--output=table"}, "No port ranges configured.\nTotal: 0 ports.\n"},
+		{true, []string{"--output", "json", "config", "show"}, "{\"command\":\"config show\",\"ranges\":[],\"total\":0}\n"},
+	} {
+		var out, diag bytes.Buffer
+		if code := Run(context.Background(), tc.args, &out, &diag, tc.terminal); code != 0 || out.String() != tc.want || diag.Len() != 0 {
+			t.Fatalf("%v: code=%d out=%q err=%q", tc.args, code, out.String(), diag.String())
+		}
+	}
+}
+
+func TestHelpAndUsage(t *testing.T) {
+	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
+	for _, args := range [][]string{nil, {"book"}, {"config", "ranges", "set", "1"}, {"config", "show", "extra"}, {"--output", "yaml"}, {"--output"}, {"--output=json", "--output=table"}} {
+		var out, diag bytes.Buffer
+		if code := Run(context.Background(), args, &out, &diag, false); code != 2 || out.Len() != 0 || !strings.Contains(diag.String(), `"code":"usage_error"`) {
+			t.Fatalf("%v: code=%d out=%s err=%s", args, code, out.String(), diag.String())
+		}
+	}
+	var out, diag bytes.Buffer
+	if code := Run(context.Background(), []string{"--help", "--output", "table"}, &out, &diag, false); code != 0 || !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "config") {
+		t.Fatalf("help: %d %s %s", code, &out, &diag)
+	}
+}
