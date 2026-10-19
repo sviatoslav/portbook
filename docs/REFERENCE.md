@@ -2,8 +2,8 @@
 
 [Back to README](../README.md) · [Installation](INSTALLING.md) · [Development](DEVELOPING.md)
 
-This reference describes the development interface in this checkout, including
-booking-only release and `release --all`.
+This reference describes the pending v0.2.0 source interface, including booking-only
+release and `release --all`. v0.2.0 is not tagged or published yet.
 Published v0.1.0 has no top-level `get`, reuses existing bookings on `reserve`,
 and succeeds on missing `release`. It also selects `default` when the service is
 omitted. The development version requires an explicit service name.

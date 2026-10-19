@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,19 +23,24 @@ func cleanupCommand(o *options, out io.Writer) *cobra.Command {
 		if err != nil {
 			return &commandError{code: "storage_error", err: err}
 		}
-		report, err := (booking.Store{Config: config.Store{Coordinator: c}}).Cleanup(cmd.Context(), dryRun)
-		if err != nil {
-			return &commandError{code: "storage_error", err: err}
-		}
-		if err := renderCleanup(out, o.format(), report); err != nil {
-			return &commandError{code: "runtime_error", err: err}
-		}
-		return nil
+		return executeCleanup(cmd.Context(), booking.Store{Config: config.Store{Coordinator: c}}, dryRun, out, o.format())
 	}}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview proposed removals without writing state")
 	once(cmd.Flags().Lookup("dry-run"))
 	cmd.InitDefaultHelpFlag()
 	return cmd
+}
+
+// Keep mutation and reporting together so output failures cannot undo a save.
+func executeCleanup(ctx context.Context, store booking.Store, dryRun bool, out io.Writer, format string) error {
+	report, err := store.Cleanup(ctx, dryRun)
+	if err != nil {
+		return &commandError{code: "storage_error", err: err}
+	}
+	if err := renderCleanup(out, format, report); err != nil {
+		return &commandError{code: "runtime_error", err: err}
+	}
+	return nil
 }
 
 func renderCleanup(w io.Writer, format string, r booking.CleanupReport) error {

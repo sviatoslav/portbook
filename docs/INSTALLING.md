@@ -4,7 +4,10 @@
 
 The public repository is available now under the [MIT License](../LICENSE).
 [v0.1.0 is available](https://github.com/sviatoslav/portbook/releases/tag/v0.1.0).
-Install with Homebrew, download a binary, or build from source.
+Install with Homebrew, download a binary, or build from source. v0.2.0 is being
+prepared but is not published; Homebrew and the download examples below still
+target v0.1.0. See [migration notes](RELEASING.md#v020-preparation-and-migration)
+before switching to the pending interface.
 
 ## Homebrew
 

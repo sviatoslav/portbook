@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/sviatoslav/portbook/internal/booking"
+	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
@@ -109,16 +110,11 @@ func TestCleanupSuccessfulMutationSurvivesOutputFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The OS chooses the candidate, then the real cleanup probe establishes that
-	// the released TCP port is free; this test does not assume a fixed free port.
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// This test verifies save/report ordering, not OS availability. A port chosen
+	// by Listen(":0") can become occupied after closing it, legitimately making
+	// cleanup retain the booking. Use the store's existing probe dependency.
+	const port = 54321
+
 	data, err := json.Marshal(map[string]any{"version": 1, "bookings": booking.Registry{filepath.Join(parent, "gone"): {"default": port}}})
 	if err != nil {
 		t.Fatal(err)
@@ -130,10 +126,15 @@ func TestCleanupSuccessfulMutationSurvivesOutputFailure(t *testing.T) {
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	var diagnostics bytes.Buffer
-	if code := Run(context.Background(), []string{"cleanup"}, failedWriter{}, &diagnostics, false); code != 1 || !strings.Contains(diagnostics.String(), `"code":"runtime_error"`) {
-		t.Fatal(code, diagnostics.String())
+	probes := 0
+	store := booking.Store{Config: config.Store{Coordinator: c}, Probe: func(context.Context, int) (bool, error) { probes++; return true, nil }}
+	err = executeCleanup(context.Background(), store, false, failedWriter{}, "json")
+	var classified *commandError
+	if !errors.As(err, &classified) || classified.code != "runtime_error" || probes != 1 {
+		t.Fatal(err, probes)
 	}
+	var diagnostics bytes.Buffer
+
 	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
