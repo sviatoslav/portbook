@@ -233,3 +233,76 @@ func TestReleaseReserveIndependentProcessOrdering(t *testing.T) {
 		t.Fatal(string(data))
 	}
 }
+
+func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
+	cfg := t.TempDir()
+	root := registryRoot(t, cfg)
+	owner := t.TempDir()
+	canonical, err := booking.Directory(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, held := candidateSockets(t, 2)
+	configCandidates(t, cfg, p)
+	for _, l := range held {
+		if err := l.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := command(cfg, "reserve")
+	cmd.Dir = owner
+	if got := processResult(t, cmd, 0); got != strconv.Itoa(p[0])+"\n" {
+		t.Fatal(got)
+	}
+	if got := run(t, cfg, 0, "reserve", "server", "--directory", owner); got != strconv.Itoa(p[1])+"\n" {
+		t.Fatal(got)
+	}
+	alias := filepath.Join(t.TempDir(), "owner-alias")
+	if err := os.Symlink(owner, alias); err != nil {
+		t.Fatal(err)
+	}
+	rows := listEntries(t, run(t, cfg, 0, "list", "--directory", alias))
+	if len(rows) != 2 || rows[0] != (booking.Entry{Directory: canonical, Service: "default", Port: p[0]}) || rows[1] != (booking.Entry{Directory: canonical, Service: "server", Port: p[1]}) {
+		t.Fatal(rows)
+	}
+	res := releaseJSON(t, run(t, cfg, 0, "release", "--directory", alias))
+	if !res.Released || res.Port == nil || *res.Port != p[0] {
+		t.Fatal(res)
+	}
+	rows = listEntries(t, run(t, cfg, 0, "list", "--all"))
+	if len(rows) != 1 || rows[0].Service != "server" || rows[0].Port != p[1] {
+		t.Fatal(rows)
+	}
+	if got := run(t, cfg, 0, "reserve", "--directory", owner); got != strconv.Itoa(p[0])+"\n" {
+		t.Fatal("released port not reusable", got)
+	}
+	run(t, cfg, 0, "config", "ranges", "remove", "--all")
+	if err := os.WriteFile(filepath.Join(cfg, "config.json"), []byte("broken pool"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "location.json"), []byte("broken pointer"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, feature := range []string{"list", "release"} {
+		cmd := command(cfg, feature, "--help")
+		cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative unused")
+		if got := processResult(t, cmd, 0); !strings.Contains(got, "--directory") {
+			t.Fatal(feature, got)
+		}
+	}
+	rows = listEntries(t, run(t, cfg, 0, "list", "--all"))
+	if len(rows) != 2 {
+		t.Fatal(rows)
+	}
+	if got := run(t, cfg, 1, "reserve", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
+		t.Fatal(got)
+	}
+	res = releaseJSON(t, run(t, cfg, 0, "release", "server", "--directory", alias))
+	if !res.Released || res.Port == nil || *res.Port != p[1] {
+		t.Fatal(res)
+	}
+	rows = listEntries(t, run(t, cfg, 0, "list", "--directory", alias))
+	if len(rows) != 1 || rows[0].Service != "default" || rows[0].Port != p[0] {
+		t.Fatal(rows)
+	}
+}
