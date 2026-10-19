@@ -4,11 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"portbook/internal/config"
 	"portbook/internal/ports"
 	"text/tabwriter"
 )
 
+type pathResult struct {
+	config.Selection
+	SavedDirectory *string `json:"saved_directory"`
+	Changed        bool    `json:"-"`
+}
+
 type result struct {
+	Path    *pathResult   `json:"-"`
 	Command string        `json:"command"`
 	Ranges  []ports.Range `json:"ranges,omitempty"`
 	Changed *int          `json:"changed,omitempty"`
@@ -39,6 +47,31 @@ func noun(n int) string {
 }
 
 func render(w io.Writer, format string, res result) error {
+	if res.Path != nil {
+		if format == "json" {
+			if res.Path.Changed {
+				return json.NewEncoder(w).Encode(struct {
+					Command string `json:"command"`
+					*pathResult
+				}{res.Command, res.Path})
+			}
+			return json.NewEncoder(w).Encode(struct {
+				Command string `json:"command"`
+				config.Selection
+			}{res.Command, res.Path.Selection})
+		}
+		if res.Path.Changed {
+			saved := "(none; OS default)"
+			if res.Path.SavedDirectory != nil {
+				saved = *res.Path.SavedDirectory
+			}
+			if _, err := fmt.Fprintf(w, "Saved directory: %s\n", saved); err != nil {
+				return err
+			}
+		}
+		_, err := fmt.Fprintf(w, "Effective directory: %s\nConfig file: %s\nSource: %s\n", res.Path.Directory, res.Path.ConfigFile, res.Path.Source)
+		return err
+	}
 	if format == "json" {
 		// The empty show result must carry [] rather than omit ranges.
 		if res.Changed == nil {

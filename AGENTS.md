@@ -12,6 +12,14 @@
   `state.lock`. Acquire once around reads, decisions, and saves. Do not nest this
   lock or call config mutations from another lock callback. Return callback errors
   before saving. The coordinator does not roll back arbitrary callback writes.
+- Keep coordination anchored to the OS-standard Portbook directory. Config
+  selection (`--config-dir`, environment, saved `location.json`, default) must
+  never move `state.lock` or future registry data. Resolve the saved selection
+  inside config mutation locks. Path set/reset use that same lock and fixed pointer;
+  they select locations without migrating or deleting configuration. Directory
+  paths must round-trip through JSON; bootstrap filenames and their children
+  are reserved configuration targets. Ordinary
+  pointer reads fail closed; only explicit set/reset may repair pointer evidence.
 - Keep config separate from future registry data. Removing allowed ports must
   never delete or rewrite bookings. No heartbeat, expiry, daemon, proxy, or DB.
 - Configuration reads fail closed. Preserve malformed, duplicate-member,

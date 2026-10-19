@@ -174,6 +174,8 @@ func TestInaccessibleConfigPreserved(t *testing.T) {
 }
 
 func TestOverrideMustBeAbsolute(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, value := range []string{"", "relative"} {
 		t.Setenv("PORTBOOK_CONFIG_DIR", value)
 		if _, err := Default(); err == nil {
@@ -183,7 +185,7 @@ func TestOverrideMustBeAbsolute(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PORTBOOK_CONFIG_DIR", dir)
 	s, err := Default()
-	if err != nil || s.Coordinator.Dir != dir {
+	if err != nil || s.Location.Env != dir || s.Coordinator.Dir == dir {
 		t.Fatalf("override ignored: %+v %v", s, err)
 	}
 }

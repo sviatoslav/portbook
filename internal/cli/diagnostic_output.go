@@ -8,7 +8,15 @@ import "strings"
 // Stop at -- and retain the first selection, matching onceValue on duplicates.
 // An invalid or missing first value falls back to the terminal default.
 func diagnosticOutput(args []string, fallback string) string {
-	for i, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--config-dir" {
+			if i+1 < len(args) && args[i+1] == "--" {
+				return fallback
+			}
+			i++
+			continue
+		}
 		if arg == "--" {
 			break
 		}

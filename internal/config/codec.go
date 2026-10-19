@@ -97,7 +97,7 @@ func uniqueMembers(dec *json.Decoder) error {
 }
 
 func canonicalKey(key string) string {
-	for _, name := range []string{"version", "ranges", "start", "end"} {
+	for _, name := range []string{"version", "ranges", "start", "end", "directory"} {
 		if strings.EqualFold(key, name) {
 			return name
 		}

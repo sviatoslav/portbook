@@ -28,6 +28,10 @@ local verification in this checkout was performed on macOS. Windows is untested.
 ## Commands
 
 ```sh
+portbook config path get
+portbook config path set /absolute/path
+portbook config path reset
+portbook --config-dir /temporary/path config show
 portbook config show
 portbook config ranges add 50000-50499
 portbook config ranges add 51000
@@ -90,9 +94,9 @@ works. `--help` / `-h` describes commands and examples and follows this conventi
 command: `portbook config ranges remove --help` describes removal and `--all`.
 Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
 and `--all` mixed with operands still fail with exit 2 when help is requested.
-Recognized commands can show help without required operands. Global `--output`
+Recognized commands can show help without required operands. Global `--output` and `--config-dir`
 can appear before or after the command path; `--all` belongs to `ranges remove`.
-Repeated `--output` or `--all` flags are rejected. `--` ends flag parsing, so
+Repeated `--output`, `--config-dir`, or `--all` flags are rejected. `--` ends flag parsing, so
 `config ranges add -- 51000` works and `--help` after `--` is an operand.
 There are no prompts.
 
@@ -142,8 +146,64 @@ directory, under `portbook`:
 | macOS | `~/Library/Application Support/portbook/config.json` |
 | Linux | `$XDG_CONFIG_HOME/portbook/config.json`, or `~/.config/portbook/config.json` if unset |
 
-One override, `PORTBOOK_CONFIG_DIR`, replaces the directory. If set, it must be a
-nonempty absolute path. Use an isolated directory for experiments or tests:
+Configuration directory selection, from highest to lowest priority:
+
+1. Global `--config-dir /absolute/path` for this invocation.
+2. `PORTBOOK_CONFIG_DIR` for this process environment.
+3. A directory saved by `config path set /absolute/path`.
+4. The OS-standard Portbook directory above.
+
+All paths name a **directory containing `config.json`**, not a custom filename.
+Paths must be nonempty, absolute, and valid UTF-8 so JSON persistence preserves
+them exactly. Existing targets and their components must
+be directories; the destination need not exist. Paths are cleaned but symlinks
+in directory components are not resolved to a canonical physical path. A higher
+priority selection bypasses lower priority choices, including invalid environment
+values or a corrupt/unreadable saved pointer. The fixed OS-standard directory is
+still required for mutation coordination. Its `location.json` and `state.lock`
+paths (including children and case aliases) are reserved and cannot serve as
+config directories. Existing directory-symlink aliases of that root are checked
+as well. Such bootstrap conflicts report a storage error.
+
+`config path get` reports the effective directory, config filename, and source
+(`flag`, `environment`, `saved`, or `default`). It works before any file exists
+and creates no directories, files, or locks. Set/reset report both the saved
+choice and the still-effective location, so active temporary overrides are visible:
+
+```sh
+portbook config path set /absolute/path
+portbook --config-dir /temporary/path config path reset
+portbook config path get --output json
+```
+
+```json
+{"command":"config path get","directory":"/absolute/path","config_file":"/absolute/path/config.json","source":"saved"}
+```
+
+Set/reset use the same effective fields plus `saved_directory`, a string for set
+and `null` for reset. Repeating set or reset is successful. Reset removes only
+the saved choice; environment and flag overrides remain active. These commands
+select configuration; they never copy, move, merge, clear, or delete configuration
+files. Selecting an uninitialized directory means an empty allowed pool. Returning
+to an earlier directory restores access to its unchanged configuration.
+
+The saved choice lives in `location.json` in the **fixed OS-standard Portbook
+directory**, alongside `state.lock`, even when configuration is relocated:
+
+```json
+{"version":1,"directory":"/absolute/path"}
+```
+
+Ordinary resolution fails closed on malformed, duplicate-member, unknown-field,
+unsupported-version, invalid Unicode (including unpaired surrogate escapes),
+non-regular (including symlink), inaccessible, or invalid-path
+pointer files. It does not fall back to another configuration. Explicit set/reset
+can repair a corrupt or unreadable pointer: set atomically replaces that entry;
+reset unlinks it. A symlink target is never followed by these repairs. Pointer
+directories are rejected. Help validates selected paths and supplied operands;
+set/reset help permits a broken pointer so repairs remain discoverable.
+
+For an isolated configuration selection (coordination still uses the fixed root):
 
 ```sh
 export PORTBOOK_CONFIG_DIR="$(mktemp -d)"
@@ -168,17 +228,24 @@ escaped names, or case aliases), unsupported versions, invalid ranges, non-regul
 are never reset, quarantined, moved, or overwritten by a command. Resolve these
 errors explicitly before retrying; the original config remains available.
 
-Every mutation holds the same OS-backed `state.lock` in that directory across
-read, modification, and save, using [gofrs/flock](https://github.com/gofrs/flock).
+Every mutation holds the same OS-backed `state.lock` in the fixed OS-standard
+Portbook directory across read, modification, and save, using [gofrs/flock](https://github.com/gofrs/flock).
 Lock acquisition waits at most five seconds. Future booking mutations must use
-this same lock. The lock file stays in place: do not delete or replace it while
+this same lock. Changing config directory never relocates or splits coordination
+or future registry data. Range mutations resolve the saved selection inside the
+lock, so a concurrent path change and range update have a defined serial order.
+Path set/reset update the fixed pointer under that same lock, without nesting.
+The lock file stays in place: do not delete or replace it while
 processes may be running. The OS releases a held lock when its process exits.
 
 Saves use a private temporary file in the same directory, sync it, then atomically
-rename it over `config.json` and sync the directory. New directories use mode
-0700 and config files use 0600. Readers see a complete snapshot without taking
+rename it over `config.json` (or `location.json` for a saved choice) and sync the
+directory. Reset also syncs the directory after removing the pointer. New
+directories use mode 0700 and config/pointer files use 0600. Readers see a complete
+snapshot without taking
 the mutation lock. A directory-sync failure after rename returns an error but
-the replacement has already committed; read the config before retrying.
+the replacement has already committed; inspect the config or saved choice before
+retrying. A reset directory-sync failure likewise follows committed removal.
 These guarantees assume a local filesystem supporting OS locks and atomic
 rename, and cooperating writers using this lock. Do not manually edit files
 while mutations are running.
@@ -192,7 +259,7 @@ go vet ./...
 ```
 
 The integration suite builds the real executable and exercises independent
-processes, including concurrent additions and removals. Tests use isolated
+processes, including concurrent additions, removals, and location switches. Tests use isolated
 temporary directories and never write to the normal user configuration.
 
 The command tree uses [Cobra](https://cobra.dev/docs/how-to-guides/working-with-flags/)
@@ -208,12 +275,13 @@ Code responsibilities:
 | --- | --- |
 | `cmd/portbook` | Process exit and terminal detection |
 | `internal/cli/commands.go` | Command definitions, flags, operand validation, scoped help |
-| `internal/cli/execute.go` | Explicit show/add/remove/clear handlers |
+| `internal/cli/execute.go` | Explicit config and path handlers |
 | `internal/cli/render.go` | Stable success/error JSON and table output |
 | `internal/ports` | Port parsing and set operations |
 | `internal/config/codec.go` | Versioned JSON encoding and fail-closed decoding |
-| `internal/config/store.go` | Read and atomic config persistence |
-| `internal/state` | Shared directory resolution and OS lock coordination |
+| `internal/config/store.go` | Read and atomic config/pointer persistence |
+| `internal/config/location.go` | Config selection and fixed bootstrap pointer |
+| `internal/state` | Fixed OS-standard coordination directory and OS lock |
 
 `state.Coordinator.WithLock(ctx, func() error)` owns only the shared lock. Its
 callback may fail; the lock is released on return or panic, and the OS releases
