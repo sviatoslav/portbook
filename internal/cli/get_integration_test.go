@@ -14,7 +14,7 @@ import (
 func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 	cfg, owner := t.TempDir(), t.TempDir()
 	root := registryRoot(t, cfg)
-	if got := run(t, cfg, 1, "get", "--directory", owner); !strings.Contains(got, "reservation not found") || !strings.Contains(got, `"code":"runtime_error"`) {
+	if got := run(t, cfg, 1, "get", "default", "--directory", owner); !strings.Contains(got, "reservation not found") || !strings.Contains(got, `"code":"runtime_error"`) {
 		t.Fatal(got)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
@@ -23,7 +23,7 @@ func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 	p, held := candidateSockets(t, 1)
 	configCandidates(t, cfg, p)
 	held[p[0]].Close()
-	want := run(t, cfg, 0, "reserve", "--directory", owner)
+	want := run(t, cfg, 0, "reserve", "default", "--directory", owner)
 	path := filepath.Join(root, booking.File)
 	before, _ := os.ReadFile(path)
 	alias := filepath.Join(t.TempDir(), "alias")
@@ -38,29 +38,29 @@ func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"get", "--directory", alias}, {"get", "default", "--directory", owner, "--output", "table"},
-		{"get", "--directory", owner, "--output", "json"},
+		{"get", "default", "--directory", alias}, {"get", "default", "--directory", owner, "--output", "table"},
+		{"get", "default", "--directory", owner, "--output", "json"},
 	} {
 		if got := run(t, cfg, 0, args...); got != want {
 			t.Fatal(args, got)
 		}
 	}
-	cmd := command(cfg, "get")
+	cmd := command(cfg, "get", "default")
 	cmd.Dir = owner
 	cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative")
 	if got := processResult(t, cmd, 0); got != want {
 		t.Fatal(got)
 	}
-	if got := run(t, cfg, 0, "get", "--help"); !strings.Contains(got, "get [SERVICE]") {
+	if got := run(t, cfg, 0, "get", "--help"); !strings.Contains(got, "get SERVICE") {
 		t.Fatal(got)
 	}
 	lock.Unlock()
 	for _, args := range [][]string{
-		{"get", "a", "b"}, {"get", ""}, {"get", "--directory=relative"}, {"get", "--all"},
-		{"get", "--directory", owner, "--directory", owner}, {"get", "--output=yaml"},
+		{"get", "a", "b"}, {"get", ""}, {"get", "default", "--directory=relative"}, {"get", "--all"},
+		{"get", "default", "--directory", owner, "--directory", owner}, {"get", "--output=yaml"},
 		{"get", "--output=json", "--output=table"}, {"get", "a", "b", "--help"},
-		{"get", "--directory=relative", "--help"}, {"get", "--config-dir=relative"},
-		{"get", "--directory", filepath.Join(owner, "absent")},
+		{"get", "default", "--directory=relative", "--help"}, {"get", "--config-dir=relative"},
+		{"get", "default", "--directory", filepath.Join(owner, "absent")},
 	} {
 		run(t, cfg, 2, args...)
 	}
@@ -69,7 +69,7 @@ func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 			t.Fatal(got)
 		}
 	}
-	if got := run(t, cfg, 1, "reserve", "--directory", alias); !strings.Contains(got, "reservation already exists") {
+	if got := run(t, cfg, 1, "reserve", "default", "--directory", alias); !strings.Contains(got, "reservation already exists") {
 		t.Fatal(got)
 	}
 	after, _ := os.ReadFile(path)
@@ -78,7 +78,7 @@ func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 	}
 	for _, corrupt := range []string{`{"version":99,"bookings":{}}`, `{"version":1,"version":1,"bookings":{}}`, `broken`} {
 		os.WriteFile(path, []byte(corrupt), 0600)
-		if got := run(t, cfg, 1, "get", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
+		if got := run(t, cfg, 1, "get", "default", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
 			t.Fatal(got)
 		}
 		after, _ := os.ReadFile(path)

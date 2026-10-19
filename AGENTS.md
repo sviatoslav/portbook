@@ -15,6 +15,8 @@
   discovery. Get reads existing bookings even outside the pool or with a listener present,
   using only a registry snapshot without locks, config/pointer reads, writes, or
   probes. Duplicate reserve fails under the mutation lock without rewriting data.
+  Get/reserve/release require one explicit service; no implicit default. The
+  literal service `default` stays valid for existing bookings, without migration.
   New bookings require the lowest globally unbooked and OS-bindable TCP port.
 - Preserve the command paths, port-set semantics, table/JSON output, error schema,
   and exit codes documented in README.md. Define commands and flags in Cobra;

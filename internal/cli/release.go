@@ -15,9 +15,9 @@ import (
 func releaseCommand(o *options, out io.Writer) *cobra.Command {
 	var directory, owner, service string
 	cmd := &cobra.Command{
-		Use: "release [SERVICE]", Short: "Release an idle booking for a directory and service (default: default)",
+		Use: "release SERVICE", Short: "Release an idle booking for a directory and service",
 		Long:    "Release one booking only when its TCP port can be bound on every supported address family. Occupied or uncertain ports are retained. A missing booking fails without rewriting the registry. The owner defaults to cwd, without Git root discovery. Configuration and saved path choices are not read.",
-		Example: "  portbook release server --directory /projects/my-app\n  portbook release",
+		Example: "  portbook release server --directory /projects/my-app\n  portbook release api",
 		Args:    serviceOwnerArgs(&directory, &owner, &service),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := o.validate(); err != nil {

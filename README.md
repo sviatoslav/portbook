@@ -141,7 +141,7 @@ local snapshot checks, CI gates, and intentional tag steps.
 Ask for a port from your project directory:
 
 ```sh
-portbook reserve                  # 49152
+portbook reserve server           # 49152
 portbook reserve api              # 49153
 portbook get api                  # 49153 again
 portbook list                     # see this project's bookings
@@ -152,8 +152,8 @@ Works out of the box with 16,384 candidate ports (49152–65535). Busy or alread
 booked ports are skipped. Numbers above are illustrative; new reservations use
 the lowest available allowed port. Customize the pool only if needed.
 
-A booking belongs to your current directory and service name (`default`
-when omitted). Create it with `reserve`, read it with `get`, and remove it with
+A booking belongs to your current directory and explicit service name. Create it
+with `reserve`, read it with `get`, and remove it with
 `release` after stopping the listener. Projects share one registry,
 so they avoid each other's booked ports. Run from another directory for another
 project, or use `--directory /absolute/project/path`.
@@ -171,9 +171,9 @@ agent skills are future work.
 ## Commands
 
 ```sh
-portbook get [SERVICE] [--directory ABSOLUTE_DIRECTORY]
-portbook reserve [SERVICE] [--directory ABSOLUTE_DIRECTORY]
-portbook release [SERVICE] [--directory ABSOLUTE_DIRECTORY]
+portbook get SERVICE [--directory ABSOLUTE_DIRECTORY]
+portbook reserve SERVICE [--directory ABSOLUTE_DIRECTORY]
+portbook release SERVICE [--directory ABSOLUTE_DIRECTORY]
 portbook list [--directory ABSOLUTE_DIRECTORY | --all]
 portbook cleanup [--dry-run]
 portbook config path get
@@ -237,7 +237,7 @@ Total: 0 ports.
 
 ## Getting a reserved port
 
-`portbook get [SERVICE] [--directory ABSOLUTE_DIRECTORY]` reads an existing
+`portbook get SERVICE [--directory ABSOLUTE_DIRECTORY]` reads an existing
 reservation and prints its decimal port plus newline, including with
 `--output json`. It uses the same owner/service validation and aliases as `reserve`.
 Missing reservations fail with `reservation not found`; it never allocates.
@@ -261,13 +261,14 @@ $ portbook reserve server --directory /projects/my-app
 50000
 $ portbook get server --directory /projects/my-app
 50000
-$ portbook reserve --directory /projects/my-app
+$ portbook reserve default --directory /projects/my-app
 50001
 ```
 
 These ports are illustrative: a new booking uses the lowest available configured
-port. `reserve` accepts at most one service. Omitting it selects the literal
-`default`, so `get` and `get default` read the same booking.
+port. `get`, `reserve`, and `release` each require exactly one explicit service.
+Omission is a usage error; help may omit the service. The literal name `default`
+remains valid for historical bookings; existing entries are never renamed or migrated.
 An existing reservation makes `reserve` fail with `reservation already exists`,
 even when its port is occupied or outside the current pool.
 Service identities are nonempty, case-sensitive Unicode strings without NUL;
@@ -328,11 +329,11 @@ committed replacement. Inspect the registry before retrying.
 
 ```sh
 portbook release server --directory /projects/my-app
-portbook release                     # literal service default, owner is cwd
+portbook release server              # owner is cwd
 portbook --output table release server --directory /projects/my-app
 ```
 
-`release` accepts at most one service and uses the same directory validation,
+`release` requires exactly one service and uses the same directory validation,
 canonical symlink/case aliases, service identity, and `--` rules as `reserve`.
 It removes only that booking, and removes its owner map when no services remain.
 A missing booking fails with `reservation not found` without creating or rewriting

@@ -10,16 +10,17 @@ import (
 
 func serviceOwnerArgs(directory, owner, service *string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
-		if len(args) > 1 {
-			return fmt.Errorf("%s accepts at most one service", cmd.Name())
+		help, _ := cmd.Flags().GetBool("help")
+		if len(args) != 1 && !(help && len(args) == 0) {
+			return fmt.Errorf("%s requires exactly one service", cmd.Name())
 		}
-		*service = "default"
 		if len(args) == 1 {
 			*service = args[0]
+			if err := booking.ValidateService(*service); err != nil {
+				return err
+			}
 		}
-		if err := booking.ValidateService(*service); err != nil {
-			return err
-		}
+
 		selected := *directory
 		if !cmd.Flags().Changed("directory") {
 			var err error

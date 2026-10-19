@@ -76,8 +76,8 @@ func TestGetDiagnosticFlagOrdering(t *testing.T) {
 	}{
 		{[]string{"get", "--bogus", "--output=table"}, false},
 		{[]string{"get", "--bogus", "--output=json"}, true},
-		{[]string{"get", "--directory", "--output=table", "--output=json"}, true},
-		{[]string{"get", "--directory", "--output=json", "--output=table"}, false},
+		{[]string{"get", "default", "--directory", "--output=table", "--output=json"}, true},
+		{[]string{"get", "default", "--directory", "--output=json", "--output=table"}, false},
 		{[]string{"get", "--output=json", "--output=table"}, true},
 	} {
 		var out, diag bytes.Buffer

@@ -121,7 +121,7 @@ func TestCleanupReserveIndependentProcessContention(t *testing.T) {
 		l.Close()
 	}
 	gone := t.TempDir()
-	run(t, cfg, 0, "reserve", "--directory", gone)
+	run(t, cfg, 0, "reserve", "default", "--directory", gone)
 	os.Remove(gone)
 	live := t.TempDir()
 	const workers = 12

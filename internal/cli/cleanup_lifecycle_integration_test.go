@@ -46,7 +46,7 @@ func TestCleanupListReleaseReserveCombinedLifecycle(t *testing.T) {
 			t.Fatal("unexpected initial allocation", got, candidates[i])
 		}
 	}
-	if got := run(t, cfg, 0, "reserve", "--directory", live); got != fmt.Sprint(candidates[4])+"\n" {
+	if got := run(t, cfg, 0, "reserve", "default", "--directory", live); got != fmt.Sprint(candidates[4])+"\n" {
 		t.Fatal(got)
 	}
 	listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", candidates[1]))
@@ -104,7 +104,7 @@ func TestCleanupListReleaseReserveCombinedLifecycle(t *testing.T) {
 	if rows := listEntries(t, run(t, cfg, 0, "list", "--all", "--config-dir", alternate)); len(rows) != 5 {
 		t.Fatal(rows)
 	}
-	released := releaseJSON(t, run(t, cfg, 0, "release", "--directory", live, "--config-dir", alternate))
+	released := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", live, "--config-dir", alternate))
 	if !released.Released || released.Port == nil || *released.Port != candidates[4] {
 		t.Fatal(released)
 	}

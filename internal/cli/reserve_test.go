@@ -46,7 +46,7 @@ func TestGetPlainOutputAndOutputFailure(t *testing.T) {
 	os.WriteFile(path, data, 0600)
 	for _, terminal := range []bool{true, false} {
 		for _, format := range []string{"", "json", "table"} {
-			args := []string{"get", "--directory", owner}
+			args := []string{"get", "default", "--directory", owner}
 			if format != "" {
 				args = append(args, "--output", format)
 			}
@@ -57,7 +57,7 @@ func TestGetPlainOutputAndOutputFailure(t *testing.T) {
 		}
 	}
 	var diag bytes.Buffer
-	if code := Run(context.Background(), []string{"get", "--directory", owner}, failedWriter{}, &diag, false); code != 1 {
+	if code := Run(context.Background(), []string{"get", "default", "--directory", owner}, failedWriter{}, &diag, false); code != 1 {
 		t.Fatal(code, diag.String())
 	}
 	after, err := os.ReadFile(path)
@@ -94,7 +94,7 @@ func TestReserveNewBookingSurvivesOutputFailure(t *testing.T) {
 		t.Fatal(code, diag.String())
 	}
 	owner := t.TempDir()
-	args := []string{"reserve", "--directory", owner}
+	args := []string{"reserve", "default", "--directory", owner}
 	diag.Reset()
 	if code := Run(context.Background(), args, failedWriter{}, &diag, false); code != 1 || !strings.Contains(diag.String(), `"code":"runtime_error"`) {
 		t.Fatal(code, diag.String())
@@ -117,8 +117,8 @@ func TestReserveDiagnosticFormats(t *testing.T) {
 			json bool
 		}{
 			{[]string{"reserve", "a", "b"}, !terminal},
-			{[]string{"reserve", "--directory=relative", "--output=table"}, false},
-			{[]string{"reserve", "--directory=relative", "--output=json"}, true},
+			{[]string{"reserve", "default", "--directory=relative", "--output=table"}, false},
+			{[]string{"reserve", "default", "--directory=relative", "--output=json"}, true},
 			{[]string{"reserve", "--bogus", "--output=table", "--output=json"}, false},
 			{[]string{"reserve", "a", "--", "--output=json"}, !terminal},
 		} {

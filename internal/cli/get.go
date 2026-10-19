@@ -14,9 +14,9 @@ import (
 func getCommand(o *options, out io.Writer) *cobra.Command {
 	var directory, owner, service string
 	cmd := &cobra.Command{
-		Use: "get [SERVICE]", Short: "Get an existing reserved port (default service: default)",
+		Use: "get SERVICE", Short: "Get an existing reserved port",
 		Long:    "Read one registry snapshot without locks, writes, configuration reads, or TCP probes. A missing reservation fails. Success prints only the decimal port, even with --output json. The owner defaults to cwd, without Git root discovery.",
-		Example: "  portbook get api\n  portbook get --directory /projects/my-app",
+		Example: "  portbook get api\n  portbook get api --directory /projects/my-app",
 		Args:    serviceOwnerArgs(&directory, &owner, &service),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := o.validate(); err != nil {

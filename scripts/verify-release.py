@@ -87,15 +87,18 @@ def smoke(binary, temp, version, commit):
     require("Usage:" in json.loads(run("--help"))["help"], "JSON help mismatch")
     require("Usage:" in run("--output", "table", "--help"), "table help mismatch")
     require(json.loads(run("list", "--all"))["bookings"] == [], "fresh list")
-    require("reservation not found" in run("get", code=1), "fresh missing get")
+    for command in ("get", "reserve", "release"):
+        missing = json.loads(run(command, code=2))["error"]
+        require(missing["code"] == "usage_error" and "requires exactly one service" in missing["message"], f"omitted service: {command}")
+    require("reservation not found" in run("get", "default", code=1), "fresh missing get")
     require(json.loads(run("cleanup", "--dry-run"))["rows"] == [], "fresh cleanup")
     require(all(not Path(env[key]).exists() for key in ("HOME", "XDG_CONFIG_HOME", "PORTBOOK_CONFIG_DIR")), "read-only commands wrote state")
     require(json.loads(run("--output", "invalid", code=2))["error"]["code"] == "usage_error", "error contract")
     config = json.loads(run("config", "show"))
     require(config["ranges"] == [{"start": 49152, "end": 65535}] and config["total"] == 16384, "missing config defaults")
     require(not Path(env["PORTBOOK_CONFIG_DIR"]).exists(), "config show wrote defaults")
-    # Execute the README quick start in a genuinely unconfigured installation.
-    default = run("reserve")
+    # Exercise named services in a genuinely unconfigured installation.
+    default = run("reserve", "default")
     api = run("reserve", "api")
     for port in (default, api):
         require(re.fullmatch(r"[0-9]+\n", port) and 49152 <= int(port) <= 65535, "default bare port output")
@@ -120,7 +123,7 @@ def smoke(binary, temp, version, commit):
         missing = json.loads(run(command, "api", code=1))["error"]
         require(missing["code"] == "runtime_error" and "reservation not found" in missing["message"], f"missing {command}")
     require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "missing lifecycle command rewrote state")
-    require(json.loads(run("release"))["released"], "release default")
+    require(json.loads(run("release", "default"))["released"], "release default")
     require(json.loads(run("config", "add", "49152-65535"))["total"] == 16384, "custom pool")
     owner = temp / "owner"
     owner.mkdir()

@@ -23,7 +23,7 @@ func TestReleaseOutputDefaultsAndWriteErrors(t *testing.T) {
 	t.Setenv("PORTBOOK_CONFIG_DIR", "relative ignored")
 	for _, terminal := range []bool{false, true} {
 		var out, diag bytes.Buffer
-		if code := Run(context.Background(), []string{"release", "--directory", owner}, &out, &diag, terminal); code != 1 || out.Len() != 0 || !strings.Contains(diag.String(), "reservation not found") {
+		if code := Run(context.Background(), []string{"release", "default", "--directory", owner}, &out, &diag, terminal); code != 1 || out.Len() != 0 || !strings.Contains(diag.String(), "reservation not found") {
 			t.Fatal(code, out.String(), diag.String())
 		}
 		if !terminal && !strings.Contains(diag.String(), `"code":"runtime_error"`) {
@@ -32,7 +32,7 @@ func TestReleaseOutputDefaultsAndWriteErrors(t *testing.T) {
 	}
 
 	var diag bytes.Buffer
-	if code := Run(context.Background(), []string{"release", "--directory", owner}, releaseFailWriter{}, &diag, false); code != 1 || !bytes.Contains(diag.Bytes(), []byte(`"code":"runtime_error"`)) {
+	if code := Run(context.Background(), []string{"release", "default", "--directory", owner}, releaseFailWriter{}, &diag, false); code != 1 || !bytes.Contains(diag.Bytes(), []byte(`"code":"runtime_error"`)) {
 		t.Fatal(code, diag.String())
 	}
 	port := 45000
@@ -58,7 +58,7 @@ func TestReleaseHelpIgnoresUnusedConfigEnvironment(t *testing.T) {
 		}
 		t.Setenv("PORTBOOK_CONFIG_DIR", selection)
 		var out, diag bytes.Buffer
-		if code := Run(context.Background(), []string{"release", "--help"}, &out, &diag, false); code != 0 || diag.Len() != 0 || !bytes.Contains(out.Bytes(), []byte("release [SERVICE]")) {
+		if code := Run(context.Background(), []string{"release", "--help"}, &out, &diag, false); code != 0 || diag.Len() != 0 || !bytes.Contains(out.Bytes(), []byte("release SERVICE")) {
 			t.Fatalf("selection %q: code=%d out=%q err=%q", selection, code, out.String(), diag.String())
 		}
 	}
@@ -115,7 +115,7 @@ func TestReleaseTableEscapesIdentitiesAndOutputFailureKeepsCommit(t *testing.T) 
 		t.Fatal(err)
 	}
 	var diag bytes.Buffer
-	if code := Run(context.Background(), []string{"release", "--directory", owner}, releaseFailWriter{}, &diag, false); code != 1 || !bytes.Contains(diag.Bytes(), []byte(`"code":"runtime_error"`)) {
+	if code := Run(context.Background(), []string{"release", "default", "--directory", owner}, releaseFailWriter{}, &diag, false); code != 1 || !bytes.Contains(diag.Bytes(), []byte(`"code":"runtime_error"`)) {
 		t.Fatal(code, diag.String())
 	}
 	after, err := os.ReadFile(path)

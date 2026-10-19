@@ -228,9 +228,9 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	configCmd.AddCommand(show, add, remove, path)
 	var owner, directory, service string
 	reserve := &cobra.Command{
-		Use: "reserve [SERVICE]", Short: "Reserve a TCP port for a directory and service (default: default)",
+		Use: "reserve SERVICE", Short: "Reserve a TCP port for a directory and service",
 		Long:    "Reserve the lowest available allowed TCP port for a directory and service. No configuration is needed: a missing config uses 49152-65535 (16,384 ports). An existing booking fails with reservation already exists. Use get to read it. Success always prints only the decimal port, even with --output json. The owner defaults to the current directory; Git roots are not detected.",
-		Example: "  portbook reserve server --directory /projects/my-app\n  portbook reserve",
+		Example: "  portbook reserve server --directory /projects/my-app\n  portbook reserve api",
 		Args:    serviceOwnerArgs(&directory, &owner, &service),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := o.validate(); err != nil {
