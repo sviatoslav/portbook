@@ -14,18 +14,47 @@ import (
 )
 
 type Store struct {
+	// Coordinator owns both the fixed bootstrap root and shared mutation lock.
 	Coordinator state.Coordinator
+	// Location supplies optional selection overrides. Its coordinator is ignored;
+	// one store must never resolve a pointer under a different root from its lock.
+	Location *Location
 }
 
 func Default() (Store, error) {
-	coordinator, err := state.Default()
-	return Store{Coordinator: coordinator}, err
+	return WithOverride("", false)
+}
+
+func WithOverride(dir string, supplied bool) (Store, error) {
+	l, err := DefaultLocation(dir, supplied)
+	if err != nil {
+		return Store{}, err
+	}
+	return Store{Coordinator: l.Coordinator, Location: &l}, nil
 }
 
 // Read never creates a directory, lock, or config file. Atomic replacement lets
 // readers see one complete committed snapshot without taking the mutation lock.
 func (s Store) Read() (ports.Pool, error) {
-	path := filepath.Join(s.Coordinator.Dir, "config.json")
+	dir, err := s.directory()
+	if err != nil {
+		return ports.Pool{}, err
+	}
+	return readConfig(dir)
+}
+
+func (s Store) directory() (string, error) {
+	location := Location{}
+	if s.Location != nil {
+		location = *s.Location
+	}
+	location.Coordinator = s.Coordinator
+	selection, err := location.Resolve()
+	return selection.Directory, err
+}
+
+func readConfig(dir string) (ports.Pool, error) {
+	path := filepath.Join(dir, "config.json")
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return ports.Pool{}, nil
@@ -47,7 +76,11 @@ func (s Store) Read() (ports.Pool, error) {
 // discards the in-memory changes without saving. It must not reacquire the lock.
 func (s Store) Mutate(ctx context.Context, change func(*ports.Pool) (int, error)) (changed, total int, err error) {
 	err = s.Coordinator.WithLock(ctx, func() error {
-		p, err := s.Read()
+		dir, err := s.directory()
+		if err != nil {
+			return err
+		}
+		p, err := readConfig(dir)
 		if err != nil {
 			return err
 		}
@@ -55,7 +88,7 @@ func (s Store) Mutate(ctx context.Context, change func(*ports.Pool) (int, error)
 		if err != nil {
 			return err
 		}
-		if err := s.save(p); err != nil {
+		if err := saveConfig(dir, p); err != nil {
 			return err
 		}
 		total = p.Count()
@@ -67,36 +100,44 @@ func (s Store) Mutate(ctx context.Context, change func(*ports.Pool) (int, error)
 	return changed, total, nil
 }
 
-func (s Store) save(p ports.Pool) error {
+func saveConfig(dir string, p ports.Pool) error {
 	data, err := encode(p)
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(s.Coordinator.Dir, ".config-*")
+	return atomicWrite(dir, "config.json", data)
+}
+
+// atomicWrite syncs both the replacement and its parent directory.
+func atomicWrite(dir, name string, data []byte) error {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create directory: %w", err)
+	}
+	f, err := os.CreateTemp(dir, ".portbook-*")
 	if err != nil {
-		return fmt.Errorf("create temporary config: %w", err)
+		return fmt.Errorf("create temporary %s: %w", name, err)
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
 	if _, err := f.Write(data); err != nil {
-		return fmt.Errorf("write config: %w", err)
+		return fmt.Errorf("write %s: %w", name, err)
 	}
 	if err := f.Sync(); err != nil {
-		return fmt.Errorf("sync config: %w", err)
+		return fmt.Errorf("sync %s: %w", name, err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("close config: %w", err)
+		return fmt.Errorf("close %s: %w", name, err)
 	}
-	if err := os.Rename(f.Name(), filepath.Join(s.Coordinator.Dir, "config.json")); err != nil {
-		return fmt.Errorf("replace config: %w", err)
+	if err := os.Rename(f.Name(), filepath.Join(dir, name)); err != nil {
+		return fmt.Errorf("replace %s: %w", name, err)
 	}
-	dir, err := os.Open(s.Coordinator.Dir)
+	parent, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("open config directory for sync: %w", err)
+		return fmt.Errorf("open directory for sync: %w", err)
 	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return fmt.Errorf("sync config directory (replacement already committed): %w", err)
+	defer parent.Close()
+	if err := parent.Sync(); err != nil {
+		return fmt.Errorf("sync directory (replacement already committed): %w", err)
 	}
 	return nil
 }

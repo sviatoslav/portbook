@@ -8,23 +8,49 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"portbook/internal/config"
 	"portbook/internal/ports"
 )
 
 type options struct {
 	output        string
 	defaultOutput string
+	configDir     string
+	configFlag    *pflag.Flag
 }
 
+func (o *options) configDirSet() bool { return o.configFlag != nil && o.configFlag.Changed }
+
 func (o *options) validate() error {
+	if o.configDirSet() {
+		if err := config.ValidateDirectory(o.configDir); err != nil {
+			return err
+		}
+		if err := o.validateSelection(o.configDir); err != nil {
+			return err
+		}
+	}
 	if o.output != "table" && o.output != "json" {
 		return fmt.Errorf("invalid output %q; expected table or json", o.output)
 	}
 	return nil
 }
 
+// Namespace collisions are storage failures; ordinary malformed path operands
+// remain usage errors from ValidateDirectory before this root-aware check.
+func (o *options) validateSelection(dir string) error {
+	l, err := config.DefaultLocation(o.configDir, o.configDirSet())
+	if err == nil {
+		err = l.ValidateSelection(dir)
+	}
+	if err != nil {
+		return &commandError{code: "storage_error", err: err}
+	}
+	return nil
+}
+
 func (o *options) format() string {
-	if o.validate() != nil {
+	if o.output != "table" && o.output != "json" {
 		return o.defaultOutput
 	}
 	return o.output
@@ -52,7 +78,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "portbook",
 		Short:         "Configure the set of allowed TCP ports",
-		Long:          "Portbook configures a set of allowed TCP ports. No booking commands exist yet.\n\nPORTBOOK_CONFIG_DIR overrides the state directory with an absolute path.\nExit codes: 0 success; 1 storage/runtime error; 2 usage error.",
+		Long:          "Portbook configures a set of allowed TCP ports. No booking commands exist yet.\n\nSelect configuration with --config-dir, PORTBOOK_CONFIG_DIR, a saved choice, or the OS default.\nThe shared lock remains in the OS default directory.\nExit codes: 0 success; 1 storage/runtime error; 2 usage error.",
 		SilenceErrors: true, SilenceUsage: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
@@ -62,8 +88,12 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root.SetHelpCommand(&cobra.Command{Hidden: true})
 	root.PersistentFlags().StringVar(&o.output, "output", o.output, "Output format: table or json (default: table on a terminal, json otherwise)")
 	once(root.PersistentFlags().Lookup("output"))
+	root.PersistentFlags().StringVar(&o.configDir, "config-dir", "", "Temporary absolute config directory (takes precedence over environment and saved choice)")
+	o.configFlag = root.PersistentFlags().Lookup("config-dir")
+	once(o.configFlag)
 	root.Args = groupArgs
 	root.RunE = requireSubcommand
+	repairHelp := map[*cobra.Command]bool{}
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
 		// Cobra parses flags before help but intentionally skips Args. Validate
 		// this command's supplied operands too, permitting only missing operands.
@@ -75,12 +105,22 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = err
 			return
 		}
+		// Resolve paths for help too, but allow explicit repair commands to bypass
+		// a broken saved pointer just as their execution does.
+		l, err := config.DefaultLocation(o.configDir, o.configDirSet())
+		if err == nil && !repairHelp[cmd] {
+			_, err = l.Resolve()
+		}
+		if err != nil {
+			*helpErr = &commandError{code: "storage_error", err: err}
+			return
+		}
 		text := cmd.Long
 		if text == "" {
 			text = cmd.Short
 		}
 		text += "\n\n" + cmd.UsageString()
-		var err error
+		err = nil
 		if o.format() == "json" {
 			err = json.NewEncoder(out).Encode(struct {
 				Command string `json:"command"`
@@ -93,12 +133,12 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			*helpErr = &commandError{code: "runtime_error", err: err}
 		}
 	})
-	config := &cobra.Command{Use: "config", Short: "Show or change configuration", Args: groupArgs, RunE: requireSubcommand}
+	configCmd := &cobra.Command{Use: "config", Short: "Show or change configuration", Args: groupArgs, RunE: requireSubcommand}
 	ranges := &cobra.Command{Use: "ranges", Short: "Add or remove allowed ports", Args: groupArgs, RunE: requireSubcommand}
 	show := &cobra.Command{
 		Use: "show", Short: "Show normalized ranges and the total port count", Args: cobra.NoArgs,
 		Example: "  portbook --output table config show",
-		RunE:    action(o, out, showConfig),
+		RunE:    action(o, out, o.showConfig),
 	}
 	var addRanges []ports.Range
 	add := &cobra.Command{
@@ -108,7 +148,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 			addRanges, err = parseRanges(cmd, args)
 			return err
 		},
-		RunE: action(o, out, func(ctx context.Context) (result, error) { return addConfig(ctx, addRanges) }),
+		RunE: action(o, out, func(ctx context.Context) (result, error) { return o.addConfig(ctx, addRanges) }),
 	}
 	var all bool
 	var removeRanges []ports.Range
@@ -128,17 +168,40 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 		},
 		RunE: action(o, out, func(ctx context.Context) (result, error) {
 			if all {
-				return clearConfig(ctx)
+				return o.clearConfig(ctx)
 			}
-			return removeConfig(ctx, removeRanges)
+			return o.removeConfig(ctx, removeRanges)
 		}),
 	}
 	remove.Flags().BoolVar(&all, "all", false, "Clear the configured pool; cannot be mixed with ports")
 	once(remove.Flags().Lookup("all"))
 	ranges.AddCommand(add, remove)
-	config.AddCommand(show, ranges)
-	root.AddCommand(config)
-	for _, cmd := range []*cobra.Command{root, config, ranges, show, add, remove} {
+	path := &cobra.Command{Use: "path", Short: "Discover or persistently select the config directory", Args: groupArgs, RunE: requireSubcommand}
+	get := &cobra.Command{Use: "get", Short: "Report the effective directory, config file, and selection source without writing files", Args: cobra.NoArgs, RunE: action(o, out, o.pathGet)}
+	var target string
+	set := &cobra.Command{Use: "set /absolute/path", Short: "Save a directory choice; does not migrate existing configuration", Long: "Save a directory choice in the OS default Portbook directory. Temporary overrides remain effective. Selecting an uninitialized directory starts with empty ranges; no files are migrated.", Example: "  portbook config path set /absolute/path", Args: func(cmd *cobra.Command, args []string) error {
+		help, _ := cmd.Flags().GetBool("help")
+		if len(args) == 0 && help {
+			return nil
+		}
+		if len(args) != 1 {
+			return fmt.Errorf("%s requires one absolute directory path", cmd.CommandPath())
+		}
+		if err := config.ValidateDirectory(args[0]); err != nil {
+			return err
+		}
+		if err := o.validateSelection(args[0]); err != nil {
+			return err
+		}
+		target = args[0]
+		return nil
+	}, RunE: action(o, out, func(ctx context.Context) (result, error) { return o.pathChange(ctx, target, false) })}
+	reset := &cobra.Command{Use: "reset", Short: "Remove only the saved choice; preserve configurations and active overrides", Example: "  portbook config path reset\n  portbook --config-dir /temporary/path config path reset", Args: cobra.NoArgs, RunE: action(o, out, func(ctx context.Context) (result, error) { return o.pathChange(ctx, "", true) })}
+	repairHelp[set], repairHelp[reset] = true, true
+	path.AddCommand(get, set, reset)
+	configCmd.AddCommand(show, ranges, path)
+	root.AddCommand(configCmd)
+	for _, cmd := range []*cobra.Command{root, configCmd, ranges, show, add, remove, path, get, set, reset} {
 		cmd.InitDefaultHelpFlag()
 	}
 	return root

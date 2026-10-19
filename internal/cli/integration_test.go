@@ -28,6 +28,9 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "build CLI: %v\n%s", err, output)
 		os.Exit(1)
 	}
+	// Isolate default coordination for in-process CLI tests too.
+	os.Setenv("HOME", filepath.Join(dir, "home"))
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -36,11 +39,11 @@ func TestMain(m *testing.M) {
 func command(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command(binary, args...)
 	for _, env := range os.Environ() {
-		if !strings.HasPrefix(env, "PORTBOOK_CONFIG_DIR=") {
+		if !strings.HasPrefix(env, "PORTBOOK_CONFIG_DIR=") && !strings.HasPrefix(env, "HOME=") && !strings.HasPrefix(env, "XDG_CONFIG_HOME=") {
 			cmd.Env = append(cmd.Env, env)
 		}
 	}
-	cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR="+dir)
+	cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR="+dir, "HOME="+dir+"-home", "XDG_CONFIG_HOME="+dir+"-xdg")
 	return cmd
 }
 

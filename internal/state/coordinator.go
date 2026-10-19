@@ -19,18 +19,11 @@ type Coordinator struct {
 }
 
 func Default() (Coordinator, error) {
-	dir, set := os.LookupEnv("PORTBOOK_CONFIG_DIR")
-	if set {
-		if dir == "" || !filepath.IsAbs(dir) {
-			return Coordinator{}, errors.New("PORTBOOK_CONFIG_DIR must be an absolute directory path")
-		}
-	} else {
-		base, err := os.UserConfigDir()
-		if err != nil {
-			return Coordinator{}, fmt.Errorf("locate user config directory: %w", err)
-		}
-		dir = filepath.Join(base, "portbook")
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return Coordinator{}, fmt.Errorf("locate user config directory: %w", err)
 	}
+	dir := filepath.Join(base, "portbook")
 	return Coordinator{Dir: dir, LockTimeout: 5 * time.Second}, nil
 }
 
