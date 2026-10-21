@@ -5,9 +5,9 @@
 The public repository is available now under the [MIT License](../LICENSE).
 Install with Homebrew, download an available binary from
 [GitHub Releases](https://github.com/sviatoslav/portbook/releases), or build from
-source. This guide targets v0.2.0. Check `portbook --version` and read the
-[migration notes](RELEASING.md#v020-release-notes-and-migration) when upgrading
-from v0.1.0.
+source. This guide targets v0.3.0. Check `portbook --version` and read the
+[migration notes](RELEASING.md#v030-release-notes-and-migration) when upgrading
+from earlier versions.
 
 ## Homebrew
 
@@ -42,12 +42,12 @@ specific version, and download its matching archive and `checksums.txt` into a
 new temporary download directory. Release assets are public and can be
 downloaded without signing in.
 
-The following example uses `v0.2.0` on macOS arm64.
+The following example uses `v0.3.0` on macOS arm64.
 Replace the version and archive suffix using the table. Run these commands from
 the directory containing the two downloads. Stop if checksum verification fails:
 
 ```sh
-archive=portbook_0.2.0_darwin_arm64.tar.gz
+archive=portbook_0.3.0_darwin_arm64.tar.gz
 # Select the exact downloaded archive's SHA256 entry.
 awk -v name="$archive" '$2 == name { print }' checksums.txt > selected-checksum.txt
 test "$(wc -l < selected-checksum.txt | tr -d ' ')" = 1 &&
@@ -67,14 +67,15 @@ No `sudo` is required. Release builds print the release version and Git commit;
 checkout and plain `go install` builds print `portbook dev (commit unknown)`.
 Version output is one plain-text line and reads no configuration or booking data.
 See the [command reference](REFERENCE.md#output-and-exit-codes) for output flags
-and unreleased interface changes.
+and version migration notes.
 
 ## Build or install from source
 
 Requires Go 1.26 or newer and macOS or Linux. A source build includes only
-the commands present in that checkout. The v0.2.0 source includes `get`,
+the commands present in that checkout. The v0.3.0 source includes `get`,
 strict reservation creation, required service names, record-only release, owner-scoped `release --all`, and the
-`install-skills` command. These features are absent from v0.1.0.
+`install-skills` command. Version 0.3.0 also adds `config reset`, command-scoped
+`--output`, and plain release confirmations. These features vary in older versions.
 From an accessible checkout:
 
 ```sh
@@ -89,7 +90,7 @@ Add that directory to PATH. To install a specific published version from source:
 
 ```sh
 # Choose a published version tag.
-go install github.com/sviatoslav/portbook/cmd/portbook@v0.2.0
+go install github.com/sviatoslav/portbook/cmd/portbook@v0.3.0
 ```
 
 ## Update or uninstall
