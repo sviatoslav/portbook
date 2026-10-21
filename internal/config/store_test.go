@@ -54,6 +54,9 @@ func TestFailClosed(t *testing.T) {
 				if called {
 					t.Fatal("callback ran before successful read")
 				}
+				if _, _, err := s.Reset(context.Background()); err == nil {
+					t.Fatal("reset accepted invalid config")
+				}
 				got, err := os.ReadFile(path)
 				if err != nil || !bytes.Equal(got, []byte(bad)) {
 					t.Fatalf("evidence modified: %q %v", got, err)
@@ -74,6 +77,9 @@ func TestLockTimeoutAndRecovery(t *testing.T) {
 	start := time.Now()
 	if _, _, err := s.Mutate(context.Background(), func(p *ports.Pool) (int, error) { called = true; return 0, nil }); err == nil {
 		t.Fatal("mutation ignored lock")
+	}
+	if changed, total, err := s.Reset(context.Background()); err == nil || changed != 0 || total != 0 {
+		t.Fatal("reset ignored lock", changed, total, err)
 	}
 	if called || time.Since(start) > time.Second {
 		t.Fatal("lock timeout not bounded")
@@ -159,6 +165,9 @@ func TestInaccessibleConfigPreserved(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		if _, err := s.Read(); err == nil {
 			t.Fatal("read ignored permissions")
+		}
+		if _, _, err := s.Reset(context.Background()); err == nil {
+			t.Fatal("reset ignored unreadable config")
 		}
 		if _, _, err := s.Mutate(context.Background(), func(p *ports.Pool) (int, error) { return 0, nil }); err == nil {
 			t.Fatal("mutation ignored unreadable config")

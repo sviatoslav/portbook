@@ -30,6 +30,11 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer, termina
 	options := &options{output: output, defaultOutput: output, installer: installer}
 	var helpErr error
 	root := newCommandTree(options, out, &helpErr)
+	// Cobra Find permits leaf flags before the command name. Output is scoped
+	// to structured commands, so reject that placement before execution.
+	if _, misplaced := outputScopeStart(args, root); misplaced {
+		return fail(diagnostics, output, "usage_error", errors.New("unknown flag: --output (must follow a structured command)"), 2)
+	}
 	root.SetArgs(append([]string{}, args...))
 	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {

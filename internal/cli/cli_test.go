@@ -17,7 +17,7 @@ func TestTerminalDefaultAndOverride(t *testing.T) {
 		{true, []string{"config", "show"}, "RANGE        PORTS\n49152-65535  16384\nTotal: 16384 ports.\n"},
 		{false, []string{"config", "show"}, "{\"command\":\"config show\",\"ranges\":[{\"start\":49152,\"end\":65535}],\"total\":16384}\n"},
 		{false, []string{"config", "show", "--output=table"}, "RANGE        PORTS\n49152-65535  16384\nTotal: 16384 ports.\n"},
-		{true, []string{"--output", "json", "config", "show"}, "{\"command\":\"config show\",\"ranges\":[{\"start\":49152,\"end\":65535}],\"total\":16384}\n"},
+		{true, []string{"config", "--output", "json", "show"}, "{\"command\":\"config show\",\"ranges\":[{\"start\":49152,\"end\":65535}],\"total\":16384}\n"},
 	} {
 		var out, diag bytes.Buffer
 		if code := Run(context.Background(), tc.args, &out, &diag, tc.terminal); code != 0 || out.String() != tc.want || diag.Len() != 0 {
@@ -35,7 +35,7 @@ func TestHelpAndUsage(t *testing.T) {
 		}
 	}
 	var out, diag bytes.Buffer
-	if code := Run(context.Background(), []string{"--help", "--output", "table"}, &out, &diag, false); code != 0 || !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "config") {
+	if code := Run(context.Background(), []string{"--help"}, &out, &diag, false); code != 0 || !strings.Contains(out.String(), "Usage:") || !strings.Contains(out.String(), "config") {
 		t.Fatalf("help: %d %s %s", code, &out, &diag)
 	}
 }

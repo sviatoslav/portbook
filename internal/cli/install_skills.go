@@ -89,7 +89,7 @@ func installSkillsCommand(o *options) *cobra.Command {
 	var agent string
 	cmd := &cobra.Command{
 		Use: "install-skills", Short: "Install the Portbook agent skill globally using npx skills",
-		Long:    "Install only the portbook skill from sviatoslav/portbook-skills using the third-party Vercel Skills CLI. Requires Node.js/npx and network access. Targets codex (default) or claude-code globally. Reinstallation can replace edited skill files. Installer prompts and output pass through unchanged, even with --output json; upstream may skip prompts inside coding agents. No Portbook config or bookings are read or changed. Stops after five minutes.",
+		Long:    "Install only the portbook skill from sviatoslav/portbook-skills using the third-party Vercel Skills CLI. Requires Node.js/npx and network access. Targets codex (default) or claude-code globally. Reinstallation can replace edited skill files. Installer prompts and output pass through unchanged; --output is not accepted; upstream may skip prompts inside coding agents. No Portbook config or bookings are read or changed. Stops after five minutes.",
 		Example: "  portbook install-skills\n  portbook install-skills --agent claude-code",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if err := cobra.NoArgs(cmd, args); err != nil {

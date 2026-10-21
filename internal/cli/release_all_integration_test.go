@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,13 +43,8 @@ func TestReleaseAllCwdIsolationBusyListenerAndReserve(t *testing.T) {
 	cmd := command(cfg, "release", "--all")
 	cmd.Dir = owner
 	text := processResult(t, cmd, 0)
-	var res struct {
-		Command string
-		All     bool
-		booking.ReleaseAllResult
-	}
-	if err := json.Unmarshal([]byte(text), &res); err != nil || res.Command != "release" || !res.All || res.Directory != owner || res.Released != 2 || !reflect.DeepEqual(res.Ports, p[:2]) {
-		t.Fatal(text, err)
+	if text != fmt.Sprintf("Released 2 bookings in %q: %d, %d.\n", owner, p[0], p[1]) {
+		t.Fatal(text)
 	}
 	rows := listEntries(t, run(t, cfg, 0, "list", "--all"))
 	if len(rows) != 2 {
@@ -120,9 +114,12 @@ func TestReleaseAllAndReserveIndependentProcessSerialization(t *testing.T) {
 			t.Fatal(err, diags[i].String())
 		}
 	}
-	var res booking.ReleaseAllResult
-	if err := json.Unmarshal(outs[0].Bytes(), &res); err != nil || res.Released != 2 {
-		t.Fatal(outs[0].String(), err)
+	canonicalOwner, err := booking.Directory(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outs[0].String() != fmt.Sprintf("Released 2 bookings in %q: %d, %d.\n", canonicalOwner, p[0], p[1]) {
+		t.Fatal(outs[0].String())
 	}
 	port, err := strconv.Atoi(strings.TrimSpace(outs[1].String()))
 	if err != nil {

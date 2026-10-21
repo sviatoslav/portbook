@@ -12,6 +12,14 @@ import (
 // Stop at -- and retain the first selection, matching onceValue on duplicates.
 // An invalid or missing first value falls back to the terminal default.
 func diagnosticOutput(args []string, fallback string, cmd *cobra.Command) string {
+	if cmd == nil || cmd.Flag("output") == nil {
+		return fallback
+	}
+	start, misplaced := outputScopeStart(args, cmd.Root())
+	if misplaced || start < 0 {
+		return fallback
+	}
+	args = args[start:]
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		// A known value-taking flag consumes its next token even if that token looks
@@ -45,4 +53,37 @@ func diagnosticOutput(args []string, fallback string, cmd *cobra.Command) string
 		}
 	}
 	return fallback
+}
+
+// outputScopeStart finds the first command using the root's Cobra metadata.
+// It consumes root flag values so an output-shaped config path is not treated
+// as a flag. Cobra still owns all operand/flag validation and command dispatch.
+func outputScopeStart(args []string, root *cobra.Command) (start int, misplaced bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if name, long := strings.CutPrefix(arg, "--"); long {
+			name, _, assigned := strings.Cut(name, "=")
+			if name == "output" {
+				misplaced = true
+			}
+			flag := root.Flag(name)
+			if !assigned && ((flag != nil && flag.NoOptDefVal == "") || name == "output") {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		for _, child := range root.Commands() {
+			if child.Name() == arg {
+				return i + 1, misplaced
+			}
+		}
+		break
+	}
+	return -1, misplaced
 }

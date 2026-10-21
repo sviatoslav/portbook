@@ -37,7 +37,7 @@ func TestReleaseAllValidationAndHelp(t *testing.T) {
 				t.Fatal(args, code, out.String(), diag.String())
 			}
 		}
-		for _, args := range [][]string{{"release", "--all", "--help"}, {"release", "--all", "--directory", owner, "--help"}, {"--output", "table", "release", "--all", "--help"}} {
+		for _, args := range [][]string{{"release", "--all", "--help"}, {"release", "--all", "--directory", owner, "--help"}} {
 			var out, diag bytes.Buffer
 			if code := Run(context.Background(), args, &out, &diag, terminal); code != 0 || diag.Len() != 0 || !strings.Contains(out.String(), "--all") {
 				t.Fatal(args, code, out.String(), diag.String())
@@ -65,21 +65,11 @@ func TestReleaseAllValidationAndHelp(t *testing.T) {
 func TestReleaseAllRenderingAndCommittedOutputFailure(t *testing.T) {
 	res := booking.ReleaseAllResult{Directory: "/projects/owner\n\x1b[31m", Ports: []int{45000, 45002}, Released: 2}
 	var out bytes.Buffer
-	if err := renderReleaseAll(&out, "table", res); err != nil || out.String() != fmt.Sprintf("Released 2 bookings in %q: 45000, 45002.\n", res.Directory) {
+	if err := renderReleaseAll(&out, res); err != nil || out.String() != fmt.Sprintf("Released 2 bookings in %q: 45000, 45002.\n", res.Directory) {
 		t.Fatal(out.String(), err)
 	}
-	out.Reset()
-	if err := renderReleaseAll(&out, "json", res); err != nil {
+	if err := renderReleaseAll(releaseFailWriter{}, res); !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatal(err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(out.Bytes(), &doc); err != nil || len(doc) != 5 || doc["all"] != true || doc["released"] != float64(2) || doc["directory"] != res.Directory {
-		t.Fatal(out.String(), err)
-	}
-	for _, format := range []string{"json", "table"} {
-		if err := renderReleaseAll(releaseFailWriter{}, format, res); !errors.Is(err, io.ErrClosedPipe) {
-			t.Fatal(err)
-		}
 	}
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -138,9 +128,8 @@ func TestReleaseFlagLookingServiceIsNotBulk(t *testing.T) {
 	if code := Run(context.Background(), []string{"release", "--directory", owner, "--", "--all"}, &out, &diag, false); code != 0 || diag.Len() != 0 {
 		t.Fatal(code, out.String(), diag.String())
 	}
-	var res booking.ReleaseResult
-	if err := json.Unmarshal(out.Bytes(), &res); err != nil || res.Service != "--all" || res.Port == nil || *res.Port != 45000 {
-		t.Fatal(out.String(), err)
+	if out.String() != fmt.Sprintf("Released port 45000 for %q in %q.\n", "--all", owner) {
+		t.Fatal(out.String())
 	}
 	var registry struct{ Bookings booking.Registry }
 	after, err := os.ReadFile(path)

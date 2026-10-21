@@ -90,8 +90,6 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	root.SetErr(io.Discard)
 	// Expose --help on each command, without adding a separate help command.
 	root.SetHelpCommand(&cobra.Command{Hidden: true})
-	root.PersistentFlags().StringVar(&o.output, "output", o.output, "Output format: table or json (default: table on a terminal, json otherwise)")
-	once(root.PersistentFlags().Lookup("output"))
 	root.PersistentFlags().StringVar(&o.configDir, "config-dir", "", "Temporary absolute config directory (takes precedence over environment and saved choice)")
 	o.configFlag = root.PersistentFlags().Lookup("config-dir")
 	once(o.configFlag)
@@ -162,17 +160,23 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 		}
 	})
 	configCmd := &cobra.Command{Use: "config", Short: "Show or change configuration", Args: groupArgs, RunE: requireSubcommand}
+	configCmd.PersistentFlags().StringVar(&o.output, "output", o.output, "Output format: table or json (default: table on a terminal, json otherwise)")
+	once(configCmd.PersistentFlags().Lookup("output"))
+	for _, cmd := range []*cobra.Command{list, cleanup} {
+		cmd.Flags().StringVar(&o.output, "output", o.output, "Output format: table or json (default: table on a terminal, json otherwise)")
+		once(cmd.Flags().Lookup("output"))
+	}
 	show := &cobra.Command{
 		Use: "show", Short: "Show normalized ranges and the total port count",
 		Long: "Show the effective pool. Missing configuration uses 49152-65535 (16,384 ports); an explicit empty configuration stays empty. Reading never saves configuration.", Args: cobra.NoArgs,
-		Example: "  portbook --output table config show",
+		Example: "  portbook config show --output table",
 		RunE:    action(o, out, o.showConfig),
 	}
 	var addRanges []ports.Range
 	add := &cobra.Command{
 		Use: "add PORT|START-END [PORT|START-END ...]", Short: "Add ports to the allowed set",
 		Long:    "Add ports to the effective set. With no saved config, additions form a union with the default pool (49152-65535). To replace the pool, clear it before adding custom ports.",
-		Example: "  portbook --output table config add 50000-50499\n  portbook --output table config add 51000",
+		Example: "  portbook config add --output table 50000-50499\n  portbook config add --output table 51000",
 		Args: func(cmd *cobra.Command, args []string) (err error) {
 			addRanges, err = parseRanges(cmd, args)
 			return err
@@ -184,7 +188,7 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	remove := &cobra.Command{
 		Use: "remove [PORT|START-END ...]", Short: "Remove ports from the allowed set",
 		Long:    "Remove ports from the effective set, including defaults when no config is saved. Supply ports/ranges or --all alone. Clearing the pool disables new allocations but preserves existing bookings.",
-		Example: "  portbook --output table config remove 50000-50499\n  portbook --output table config remove 51000\n  portbook --output table config remove --all",
+		Example: "  portbook config remove --output table 50000-50499\n  portbook config remove --output table 51000\n  portbook config remove --output table --all",
 		Args: func(cmd *cobra.Command, args []string) (err error) {
 			if cmd.Flags().Changed("all") && len(args) != 0 {
 				return fmt.Errorf("--all cannot be mixed with port operands")
@@ -204,6 +208,12 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	}
 	remove.Flags().BoolVar(&all, "all", false, "Clear the configured pool; cannot be mixed with ports")
 	once(remove.Flags().Lookup("all"))
+	resetPool := &cobra.Command{
+		Use: "reset", Short: "Restore the selected pool to the default ports",
+		Long:    "Atomically restore the selected configuration's pool to 49152-65535 (16,384 ports). Accepts no operands. Preserves bookings, listeners, and the saved location choice. Like other pool mutations, saves explicit defaults even when unchanged or missing; corrupt or unreadable configuration fails without replacement. Changed counts added and removed port memberships. This is distinct from config path reset, which removes only the saved location choice.",
+		Example: "  portbook config reset --output table",
+		Args:    cobra.NoArgs, RunE: action(o, out, o.resetConfig),
+	}
 	path := &cobra.Command{Use: "path", Short: "Discover or persistently select the config directory", Args: groupArgs, RunE: requireSubcommand}
 	get := &cobra.Command{Use: "get", Short: "Report the effective directory, config file, and selection source without writing files", Args: cobra.NoArgs, RunE: action(o, out, o.pathGet)}
 	var target string
@@ -227,11 +237,11 @@ func newCommandTree(o *options, out io.Writer, helpErr *error) *cobra.Command {
 	reset := &cobra.Command{Use: "reset", Short: "Remove only the saved choice; preserve configurations and active overrides", Example: "  portbook config path reset\n  portbook --config-dir /temporary/path config path reset", Args: cobra.NoArgs, RunE: action(o, out, func(ctx context.Context) (result, error) { return o.pathChange(ctx, "", true) })}
 	repairHelp[set], repairHelp[reset] = true, true
 	path.AddCommand(get, set, reset)
-	configCmd.AddCommand(show, add, remove, path)
+	configCmd.AddCommand(show, add, remove, resetPool, path)
 	var owner, directory, service string
 	reserve := &cobra.Command{
 		Use: "reserve SERVICE", Short: "Reserve a TCP port for a directory and service",
-		Long:    "Reserve the lowest available allowed TCP port for a directory and service. No configuration is needed: a missing config uses 49152-65535 (16,384 ports). An existing booking fails with reservation already exists. Use get to read it. Success always prints only the decimal port, even with --output json. The owner defaults to the current directory; Git roots are not detected.",
+		Long:    "Reserve the lowest available allowed TCP port for a directory and service. No configuration is needed: a missing config uses 49152-65535 (16,384 ports). An existing booking fails with reservation already exists. Use get to read it. Success always prints only the decimal port, and does not accept --output. The owner defaults to the current directory; Git roots are not detected.",
 		Example: "  portbook reserve server --directory /projects/my-app\n  portbook reserve api",
 		Args:    serviceOwnerArgs(&directory, &owner, &service),
 		RunE: func(cmd *cobra.Command, _ []string) error {

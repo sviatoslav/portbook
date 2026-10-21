@@ -38,8 +38,7 @@ func TestGetCLIReadOnlyLifecycleAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
-		{"get", "default", "--directory", alias}, {"get", "default", "--directory", owner, "--output", "table"},
-		{"get", "default", "--directory", owner, "--output", "json"},
+		{"get", "default", "--directory", alias}, {"get", "default", "--directory", owner},
 	} {
 		if got := run(t, cfg, 0, args...); got != want {
 			t.Fatal(args, got)

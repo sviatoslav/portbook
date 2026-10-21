@@ -3,14 +3,17 @@
 - Current scope is configuration, single-service `get`/`reserve`, owner-scoped `release`,
   read-only `list`, and explicit `cleanup`. Add batch reservations or other
   features only when explicitly requested.
-- Release deletes registry records without TCP probes or listener checks. A single
+- Release success is always a plain confirmation on terminals and pipes, with no
+  JSON receipt or output override. Errors/help retain terminal-dependent defaults.
+  Release deletes registry records without TCP probes or listener checks. A single
   service or `--all` removes only the exact canonical owner's bookings, preserving
   other owners and descendants. Missing bookings fail without creating or rewriting
   the registry. Use the fixed coordinator without reading config or saved pointer.
 - List reads only the fixed registry snapshot, without config/pointer reads, locks,
   writes, or probes. Scoped listing uses reserve owner identity; `--all` retains
   disappeared owner paths. Sort by directory then service; keep empty JSON arrays.
-- Reserve prints only the decimal port and newline, regardless of output format.
+- Reserve prints only the decimal port and newline on terminals and pipes, with
+  no output override.
   Owners are canonical existing directories, defaulting to cwd without Git-root
   discovery. Get reads existing bookings even outside the pool or with a listener present,
   using only a registry snapshot without locks, config/pointer reads, writes, or
@@ -22,6 +25,9 @@
 - Preserve the command paths, port-set semantics, table/JSON output, error schema,
   and exit codes documented in docs/REFERENCE.md. Define commands and flags in Cobra;
   use explicit handlers rather than dispatching mutations by command strings.
+- `--output` is scoped to list, cleanup, and the config subtree; root,
+  get, reserve, release, install-skills, and version reject it. Root-prefix output flags
+  must fail even though Cobra can otherwise accept leaf flags before commands.
 - Help is scoped. Resolve paths and validate applicable flags and supplied
   operands before rendering help; missing required operands may be omitted for
   help. Keep Cobra's automatic diagnostics disabled to preserve output contracts.
@@ -83,7 +89,11 @@
   selecting a missing custom config uses defaults too. Corruption/access errors
   must never trigger a fallback. Keep advanced pool setup out of the quick start.
 
-- Pool commands are `config add`, `config remove`, and `config remove --all`,
+- Pool commands are `config add`, `config remove`, `config remove --all`, and
+  `config reset`. Reset atomically persists the shared default pool in the selected
+  config; it preserves bookings and location selection and fails closed on invalid
+  evidence. Repeated resets persist defaults with zero changed memberships.
+  Keep pool reset distinct from `config path reset`. These commands run
   without an intermediate subcommand. Preserve set/range operands and scoped
   help/flag validation; keep structured command labels aligned with these paths.
 

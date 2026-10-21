@@ -19,6 +19,7 @@ func TestScopedHelpBeforeRequiredOperands(t *testing.T) {
 	}{
 		{[]string{"--help"}, "portbook", "config", "--all"},
 		{[]string{"config", "--help"}, "portbook config", "add", "--all"},
+		{[]string{"config", "reset", "--help"}, "portbook config reset", "49152-65535", "--all"},
 		{[]string{"config", "show", "--help"}, "portbook config show", "--output", "--all"},
 		{[]string{"config", "add", "--help"}, "portbook config add", "50000-50499", "--all"},
 		{[]string{"config", "remove", "--help"}, "portbook config remove", "--all", ""},
@@ -50,6 +51,9 @@ func TestHelpDoesNotBypassValidation(t *testing.T) {
 		{"config", "typo", "--help"},
 		{"config", "ranges", "add", "1", "--help"},
 		{"config", "ranges", "remove", "--all"},
+		{"config", "reset", "extra", "--help"},
+		{"config", "reset", "--all", "--help"},
+		{"config", "reset", "--directory", dir, "--help"},
 		{"config", "show", "extra", "--help"},
 		{"config", "show", "--all", "--help"},
 		{"config", "add", "--all", "--help"},

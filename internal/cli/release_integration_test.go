@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,16 +15,14 @@ import (
 	"github.com/sviatoslav/portbook/internal/booking"
 )
 
-func releaseJSON(t *testing.T, text string) booking.ReleaseResult {
+func releaseReceipt(t *testing.T, text string) booking.ReleaseResult {
 	t.Helper()
-	var doc struct {
-		Command string
-		booking.ReleaseResult
-	}
-	if err := json.Unmarshal([]byte(text), &doc); err != nil || doc.Command != "release" {
+	var port int
+	var service, directory string
+	if n, err := fmt.Sscanf(text, "Released port %d for %q in %q.\n", &port, &service, &directory); err != nil || n != 3 || text != fmt.Sprintf("Released port %d for %q in %q.\n", port, service, directory) {
 		t.Fatal(text, err)
 	}
-	return doc.ReleaseResult
+	return booking.ReleaseResult{Directory: directory, Service: service, Port: &port, Released: true}
 }
 
 func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
@@ -62,7 +61,7 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	cmd := command(cfg, "release", "default", "--directory", alias, "--config-dir", alternate)
 	// Invalid selection environment is irrelevant without an explicit flag.
 	cmd.Env = append(cmd.Env, "PORTBOOK_CONFIG_DIR=relative")
-	res := releaseJSON(t, processResult(t, cmd, 0))
+	res := releaseReceipt(t, processResult(t, cmd, 0))
 	for _, name := range []string{booking.File, "state.lock", "config.json"} {
 		if _, err := os.Stat(filepath.Join(alternate, name)); !os.IsNotExist(err) {
 			t.Fatal("release wrote selected config directory", name, err)
@@ -89,10 +88,10 @@ func TestReleaseCLIBehaviorAndConfigIndependence(t *testing.T) {
 	if !bytes.Equal(after, unchanged) {
 		t.Fatal("no-op rewrote registry")
 	}
-	if got := run(t, cfg, 0, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "Released port") {
+	if got := run(t, cfg, 0, "release", "other", "--directory", owner); !strings.Contains(got, "Released port") {
 		t.Fatal(got)
 	}
-	if got := run(t, cfg, 1, "release", "other", "--directory", owner, "--output=table"); !strings.Contains(got, "reservation not found") {
+	if got := run(t, cfg, 1, "release", "other", "--directory", owner); !strings.Contains(got, "reservation not found") {
 		t.Fatal(got)
 	}
 	for _, name := range []string{"config.json", "location.json"} {
@@ -120,7 +119,7 @@ func TestReleaseCLIBusySucceedsAndCorruptionPreservesState(t *testing.T) {
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	res := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", owner))
+	res := releaseReceipt(t, run(t, cfg, 0, "release", "default", "--directory", owner))
 	if !res.Released || res.Port == nil || *res.Port != p[0] {
 		t.Fatal(res)
 	}
@@ -205,7 +204,7 @@ func TestReleaseReserveIndependentProcessOrdering(t *testing.T) {
 			t.Fatal(err, diags[i].String())
 		}
 	}
-	res := releaseJSON(t, outs[0].String())
+	res := releaseReceipt(t, outs[0].String())
 	if !res.Released || res.Port == nil || *res.Port != p[0] {
 		t.Fatal(res)
 	}
@@ -259,7 +258,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if len(rows) != 2 || rows[0] != (booking.Entry{Directory: canonical, Service: "default", Port: p[0]}) || rows[1] != (booking.Entry{Directory: canonical, Service: "server", Port: p[1]}) {
 		t.Fatal(rows)
 	}
-	res := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", alias))
+	res := releaseReceipt(t, run(t, cfg, 0, "release", "default", "--directory", alias))
 	if !res.Released || res.Port == nil || *res.Port != p[0] {
 		t.Fatal(res)
 	}
@@ -291,7 +290,7 @@ func TestReleaseListReserveCombinedLifecycle(t *testing.T) {
 	if got := run(t, cfg, 1, "reserve", "new", "--directory", owner); !strings.Contains(got, `"code":"storage_error"`) {
 		t.Fatal(got)
 	}
-	res = releaseJSON(t, run(t, cfg, 0, "release", "server", "--directory", alias))
+	res = releaseReceipt(t, run(t, cfg, 0, "release", "server", "--directory", alias))
 	if !res.Released || res.Port == nil || *res.Port != p[1] {
 		t.Fatal(res)
 	}
