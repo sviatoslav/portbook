@@ -53,13 +53,31 @@ func (s Store) directory() (string, error) {
 	return selection.Directory, err
 }
 
-// defaultPool is applied only when config.json is absent. An explicit empty
-// document intentionally disables new allocations. Every call returns a value
-// copy, so mutations cannot change the process-wide default.
+// defaultPool supplies absent configurations and explicit pool resets. An
+// existing empty document intentionally disables new allocations. Every call
+// returns a value copy, so mutations cannot change the process-wide default.
 func defaultPool() ports.Pool {
 	var p ports.Pool
 	p.Apply([]ports.Range{{Start: 49152, End: 65535}}, true)
 	return p
+}
+
+// Reset restores the selected pool in one shared-lock transaction. Like other
+// pool mutations, it validates the existing document before saving, and persists
+// explicit defaults even if the effective pool was already the default.
+// Changed counts both removed and added port memberships.
+func (s Store) Reset(ctx context.Context) (changed, total int, err error) {
+	return s.Mutate(ctx, func(p *ports.Pool) (int, error) {
+		defaults := defaultPool()
+		changed := 0
+		for n := 1; n < len(defaults); n++ {
+			if p[n] != defaults[n] {
+				changed++
+			}
+		}
+		*p = defaults
+		return changed, nil
+	})
 }
 
 func readConfig(dir string) (ports.Pool, error) {

@@ -45,15 +45,10 @@ func TestGetPlainOutputAndOutputFailure(t *testing.T) {
 	path := filepath.Join(c.Dir, "bookings.json")
 	os.WriteFile(path, data, 0600)
 	for _, terminal := range []bool{true, false} {
-		for _, format := range []string{"", "json", "table"} {
-			args := []string{"get", "default", "--directory", owner}
-			if format != "" {
-				args = append(args, "--output", format)
-			}
-			var out, diag bytes.Buffer
-			if code := Run(context.Background(), args, &out, &diag, terminal); code != 0 || out.String() != "54321\n" || diag.Len() != 0 {
-				t.Fatal(code, out.String(), diag.String())
-			}
+		args := []string{"get", "default", "--directory", owner}
+		var out, diag bytes.Buffer
+		if code := Run(context.Background(), args, &out, &diag, terminal); code != 0 || out.String() != "54321\n" || diag.Len() != 0 {
+			t.Fatal(code, out.String(), diag.String())
 		}
 	}
 	var diag bytes.Buffer
@@ -117,9 +112,9 @@ func TestReserveDiagnosticFormats(t *testing.T) {
 			json bool
 		}{
 			{[]string{"reserve", "a", "b"}, !terminal},
-			{[]string{"reserve", "default", "--directory=relative", "--output=table"}, false},
-			{[]string{"reserve", "default", "--directory=relative", "--output=json"}, true},
-			{[]string{"reserve", "--bogus", "--output=table", "--output=json"}, false},
+			{[]string{"reserve", "default", "--directory=relative", "--output=table"}, !terminal},
+			{[]string{"reserve", "default", "--directory=relative", "--output=json"}, !terminal},
+			{[]string{"reserve", "--bogus", "--output=table", "--output=json"}, !terminal},
 			{[]string{"reserve", "a", "--", "--output=json"}, !terminal},
 		} {
 			var out, diag bytes.Buffer

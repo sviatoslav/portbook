@@ -65,8 +65,9 @@ Add `export PATH="$HOME/.local/bin:$PATH"` to your shell startup file if needed,
 open a new shell, then run `portbook --version` and `portbook --help`.
 No `sudo` is required. Release builds print the release version and Git commit;
 checkout and plain `go install` builds print `portbook dev (commit unknown)`.
-Version output is one plain-text line even with `--output json`; it reads no
-configuration or booking data. Other command output contracts are unchanged.
+Version output is one plain-text line and reads no configuration or booking data.
+See the [command reference](REFERENCE.md#output-and-exit-codes) for output flags
+and unreleased interface changes.
 
 ## Build or install from source
 
@@ -79,7 +80,7 @@ From an accessible checkout:
 ```sh
 go build -o bin/portbook ./cmd/portbook
 ./bin/portbook --version
-./bin/portbook --output table --help
+./bin/portbook --help
 go install ./cmd/portbook
 ```
 

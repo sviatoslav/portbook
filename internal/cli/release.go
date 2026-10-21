@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +18,7 @@ func releaseCommand(o *options, out io.Writer) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
 		Use: "release SERVICE | --all", Short: "Delete one booking or all bookings for an owner directory",
-		Long:    "Delete registry records without probing TCP ports or stopping listeners. Supply one service or --all for every service of this exact owner, excluding child directories. A missing booking fails without rewriting the registry. The owner defaults to cwd, without Git root discovery. Configuration and saved path choices are not read.",
+		Long:    "Delete registry records without probing TCP ports or stopping listeners. Supply one service or --all for every service of this exact owner, excluding child directories. A missing booking fails without rewriting the registry. Success always prints a plain confirmation; --output is not accepted. The owner defaults to cwd, without Git root discovery. Configuration and saved path choices are not read.",
 		Example: "  portbook release server --directory /projects/my-app\n  portbook release api\n  portbook release --all",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("all") && len(args) != 0 {
@@ -45,11 +44,11 @@ func releaseCommand(o *options, out io.Writer) *cobra.Command {
 			if all {
 				var res booking.ReleaseAllResult
 				res, err = store.ReleaseAll(cmd.Context(), owner)
-				render = func() error { return renderReleaseAll(out, o.format(), res) }
+				render = func() error { return renderReleaseAll(out, res) }
 			} else {
 				var res booking.ReleaseResult
 				res, err = store.Release(cmd.Context(), owner, service)
-				render = func() error { return renderRelease(out, o.format(), res) }
+				render = func() error { return renderRelease(out, res) }
 			}
 			if err != nil {
 				code := "storage_error"
@@ -73,25 +72,12 @@ func releaseCommand(o *options, out io.Writer) *cobra.Command {
 	return cmd
 }
 
-func renderRelease(out io.Writer, format string, res booking.ReleaseResult) error {
-	if format == "json" {
-		return json.NewEncoder(out).Encode(struct {
-			Command string `json:"command"`
-			booking.ReleaseResult
-		}{"release", res})
-	}
+func renderRelease(out io.Writer, res booking.ReleaseResult) error {
 	_, err := fmt.Fprintf(out, "Released port %d for %q in %q.\n", *res.Port, res.Service, res.Directory)
 	return err
 }
 
-func renderReleaseAll(out io.Writer, format string, res booking.ReleaseAllResult) error {
-	if format == "json" {
-		return json.NewEncoder(out).Encode(struct {
-			Command string `json:"command"`
-			All     bool   `json:"all"`
-			booking.ReleaseAllResult
-		}{"release", true, res})
-	}
+func renderReleaseAll(out io.Writer, res booking.ReleaseAllResult) error {
 	ports := make([]string, len(res.Ports))
 	for i, port := range res.Ports {
 		ports[i] = strconv.Itoa(port)

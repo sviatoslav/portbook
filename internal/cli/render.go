@@ -87,6 +87,8 @@ func render(w io.Writer, format string, res result) error {
 		verb := "Added"
 		if res.Command == "config remove" {
 			verb = "Removed"
+		} else if res.Command == "config reset" {
+			verb = "Reset"
 		}
 		_, err := fmt.Fprintf(w, "%s %d %s. Total: %d %s.\n", verb, *res.Changed, noun(*res.Changed), res.Total, noun(res.Total))
 		return err

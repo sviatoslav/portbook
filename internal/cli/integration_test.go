@@ -94,13 +94,13 @@ func TestAgreedSequence(t *testing.T) {
 		{[]string{"config", "add", "50000"}, "Added 0 ports. Total: 129 ports.\n"},
 		{[]string{"config", "remove", "--all"}, "Removed 129 ports. Total: 0 ports.\n"},
 	} {
-		got := run(t, dir, 0, append([]string{"--output", "table"}, s.args...)...)
+		got := run(t, dir, 0, append(append([]string{}, s.args...), "--output", "table")...)
 		if strings.Join(strings.Fields(got), " ") != strings.Join(strings.Fields(s.want), " ") {
 			t.Fatalf("%v: %q != %q", s.args, got, s.want)
 		}
 	}
 	run(t, dir, 0, "config", "add", "51000")
-	if got := run(t, dir, 0, "--output=table", "config", "show"); !strings.Contains(got, "Total: 1 port.") {
+	if got := run(t, dir, 0, "config", "show", "--output=table"); !strings.Contains(got, "Total: 1 port.") {
 		t.Fatal(got)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
@@ -167,7 +167,7 @@ func TestCorruptConfigPreservedAcrossProcesses(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := 0; i < 2; i++ {
-				for _, args := range [][]string{{"config", "show"}, {"config", "add", "50000"}, {"config", "remove", "--all"}} {
+				for _, args := range [][]string{{"config", "show"}, {"config", "add", "50000"}, {"config", "remove", "--all"}, {"config", "reset"}} {
 					if got := run(t, dir, 1, args...); !strings.Contains(got, `"code":"storage_error"`) {
 						t.Fatal(got)
 					}

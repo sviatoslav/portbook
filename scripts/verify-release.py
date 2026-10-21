@@ -108,7 +108,7 @@ def smoke(binary, temp, version, commit):
         return result.stdout if code == 0 else result.stderr
     require(run("--version") == f"portbook {version} (commit {commit})\n", "release version output mismatch")
     require("Usage:" in json.loads(run("--help"))["help"], "JSON help mismatch")
-    require("Usage:" in run("--output", "table", "--help"), "table help mismatch")
+    require("Usage:" in run("config", "--output", "table", "--help"), "table help mismatch")
     require("claude-code" in json.loads(run("install-skills", "--help"))["help"], "installer help")
     fake_bin = temp / "fake-bin"
     fake_bin.mkdir()
@@ -121,7 +121,7 @@ def smoke(binary, temp, version, commit):
         fake_npx.chmod(0o700)
         for agent in ("codex", "claude-code"):
             expected = "\n".join(["--yes", "skills", "add", "sviatoslav/portbook-skills", "--skill", "portbook", "--global", "--agent", agent]) + "\n"
-            require(run("install-skills", "--agent", agent, "--output", "json") == expected, "installer argv/passthrough")
+            require(run("install-skills", "--agent", agent) == expected, "installer argv/passthrough")
     finally:
         if previous_path is None:
             env.pop("PATH", None)
@@ -155,12 +155,28 @@ def smoke(binary, temp, version, commit):
     rows = json.loads(run("list"))["bookings"]
     require(rows == [{"directory": str(temp), "service": "api", "port": int(api)}, {"directory": str(temp), "service": "default", "port": int(default)}], "README list bookings")
     require(json.loads(run("config", "remove", "--all"))["changed"] == 16384, "explicit empty pool")
-    require(run("get", "api", "--output", "json") == api, "empty-pool get")
+    require(run("get", "api") == api, "empty-pool get")
     require(json.loads(run("reserve", "new", code=1))["error"]["code"] == "runtime_error", "empty pool must disable new allocations")
+    require(json.loads(run("config", "reset")) == {"command": "config reset", "changed": 16384, "total": 16384}, "pool reset defaults")
+    require(registry.read_bytes() == before, "pool reset rewrote bookings")
+    require(json.loads(run("config", "reset"))["changed"] == 0, "idempotent pool reset")
+    require(json.loads(run("config", "show"))["ranges"] == [{"start": 49152, "end": 65535}], "reset normalized ranges")
+    run("config", "remove", "--all")
+    previous_path = env.get("PATH")
+    env["PATH"] = str(temp / "no-executables")
+    try:
+        for command in ("get", "reserve", "release", "install-skills"):
+            require(json.loads(run(command, "--output", "json", code=2))["error"]["code"] == "usage_error", f"unsupported output: {command}")
+    finally:
+        if previous_path is None:
+            env.pop("PATH", None)
+        else:
+            env["PATH"] = previous_path
+    require(json.loads(run("--output", "json", "list", code=2))["error"]["code"] == "usage_error", "root-prefix output")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", int(api)))
         listener.listen()
-        require(json.loads(run("release", "api"))["released"], "busy single release")
+        require(run("release", "api") == f'Released port {int(api)} for "api" in "{temp}".\n', "busy single release")
         with socket.create_connection(listener.getsockname(), timeout=5):
             pass
     before = registry.read_bytes()
@@ -169,15 +185,16 @@ def smoke(binary, temp, version, commit):
         missing = json.loads(run(command, "api", code=1))["error"]
         require(missing["code"] == "runtime_error" and "reservation not found" in missing["message"], f"missing {command}")
     require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "missing lifecycle command rewrote state")
-    require(json.loads(run("release", "default"))["released"], "release default")
+    require(run("release", "default") == f'Released port {int(default)} for "default" in "{temp}".\n', "release default")
     require(json.loads(run("config", "add", "49152-65535"))["total"] == 16384, "custom pool")
     busy = run("reserve", "busy")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", int(busy)))
         listener.listen()
         idle = run("reserve", "idle")
-        bulk = json.loads(run("release", "--all"))
-        require(bulk == {"command": "release", "all": True, "directory": str(temp), "ports": sorted([int(busy), int(idle)]), "released": 2}, "owner bulk release")
+        bulk = run("release", "--all")
+        ports = ", ".join(str(port) for port in sorted([int(busy), int(idle)]))
+        require(bulk == f'Released 2 bookings in "{temp}": {ports}.\n', "owner bulk release")
         with socket.create_connection(listener.getsockname(), timeout=5):
             pass
         replacement = run("reserve", "replacement")

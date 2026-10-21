@@ -117,8 +117,7 @@ func TestReserveCLISelectionCwdAliasesAndGet(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"get", "default", "--directory", nested},
-		{"--output=json", "get", "default", "--directory", alias},
-		{"get", "default", "--directory", nested, "--output=table"},
+		{"get", "default", "--directory", alias},
 	} {
 		if got := run(t, cfg, 0, args...); got != want {
 			t.Fatal(args, got, want)

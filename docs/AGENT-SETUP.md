@@ -14,9 +14,9 @@ also be checked directly:
 
 ```sh
 go build -o bin/portbook ./cmd/portbook
-./bin/portbook --output table get --help
-./bin/portbook --output table reserve --help
-./bin/portbook --output table release --help
+./bin/portbook get --help
+./bin/portbook reserve --help
+./bin/portbook release --help
 ```
 
 This checkout supports the required named-service lifecycle, booking-only release,
@@ -60,7 +60,7 @@ Claude Code; upstream controls exact destinations and copy/symlink behavior.
 See official [Codex skills guidance](https://learn.chatgpt.com/docs/build-skills)
 and [Claude Code skills guidance](https://code.claude.com/docs/en/skills).
 
-Installer output passes through unchanged even with `--output json`; do not parse
+Installer output passes through unchanged; `install-skills` rejects `--output`. Do not parse
 it as a Portbook JSON result. Flag/help errors retain Portbook's usual diagnostics
 and exit 2. Launch, timeout, and external failures exit 1 with a `runtime_error`
 diagnostic after any upstream output. Portbook cancels the installer process

@@ -32,6 +32,18 @@ func (o *options) clearConfig(ctx context.Context) (result, error) {
 	return o.mutateConfig(ctx, "config remove", func(p *ports.Pool) (int, error) { n := p.Count(); *p = ports.Pool{}; return n, nil })
 }
 
+func (o *options) resetConfig(ctx context.Context) (result, error) {
+	s, err := config.WithOverride(o.configDir, o.configDirSet())
+	if err != nil {
+		return result{}, err
+	}
+	changed, total, err := s.Reset(ctx)
+	if err != nil {
+		return result{}, err
+	}
+	return result{Command: "config reset", Changed: &changed, Total: total}, nil
+}
+
 func (o *options) mutateConfig(ctx context.Context, command string, change func(*ports.Pool) (int, error)) (result, error) {
 	s, err := config.WithOverride(o.configDir, o.configDirSet())
 	if err != nil {

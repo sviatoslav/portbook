@@ -49,6 +49,7 @@ The default pool is **49152–65535** (16,384 ports). No setup is needed.
 | `config show` | — | Show the allowed pool and port count. |
 | `config add` | `PORT\|START-END [PORT\|START-END ...]` | Add ports to the pool. |
 | `config remove` | `PORT\|START-END [PORT\|START-END ...]` or `--all` | Remove ports or clear the pool. |
+| `config reset` | — | Restore the default pool. |
 | `config path get` | — | Show the effective configuration location. |
 | `config path set` | `ABSOLUTE_DIRECTORY` | Save a configuration location without moving files. |
 | `config path reset` | — | Remove the saved location choice. |
@@ -57,16 +58,22 @@ Ranges are inclusive. Additions form a union; removals subtract ports.
 Pool changes preserve existing bookings. See the [configuration guide](docs/REFERENCE.md#configuring-the-port-pool)
 for custom pools and location selection.
 
-### Shared flags and help
+`config reset`, command-scoped `--output`, and plain-only release confirmations
+are unreleased changes in this checkout. Published v0.2.0 has no pool reset,
+uses a global output flag, and emits JSON release receipts when piped.
+
+### Flags and help
 
 | Flag | Arguments/options | Description |
 | --- | --- | --- |
-| `--output` | `table` or `json` | Choose output format; `get` and `reserve` still print only a port. |
+| `--output` | `table` or `json` | Choose the format on `list`, `cleanup`, or the `config` subtree. |
 | `--config-dir` | `ABSOLUTE_DIRECTORY` | Override pool configuration for this invocation. |
 | `--help`, `-h` | On any command | Show help for that command. |
 | `--version` | On `portbook` only | Print the version and commit. |
 
-Other Portbook results default to tables on a terminal and JSON when piped.
+Place `--output` after a supported command, such as `portbook list --output json`;
+it is not a root-global flag. `get`, `reserve`, `release`, `install-skills`, root help, and
+`--version` reject it. Structured results default to tables on a terminal and JSON when piped.
 `install-skills` passes through third-party prompts and output unchanged.
 Configuration overrides never move the shared booking registry.
 
@@ -81,7 +88,7 @@ $ portbook reserve app
 49152
 $ portbook get app
 49152
-$ portbook --output table release app
+$ portbook release app
 Released port 49152 for "app" in "/projects/my-app".
 ```
 
@@ -92,7 +99,7 @@ $ portbook reserve api
 49152
 $ portbook reserve web
 49153
-$ portbook --output table list
+$ portbook list --output table
 SERVICE  PORT
 api      49152
 web      49153

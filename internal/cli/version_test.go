@@ -16,12 +16,10 @@ func TestVersionOutputWithoutState(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "absent-xdg"))
 	t.Setenv("PORTBOOK_CONFIG_DIR", "invalid-unused-selection")
 	for _, terminal := range []bool{true, false} {
-		for _, format := range []string{"json", "table"} {
-			var out, diag bytes.Buffer
-			code := Run(context.Background(), []string{"--version", "--output", format}, &out, &diag, terminal)
-			if code != 0 || out.String() != "portbook dev (commit unknown)\n" || diag.Len() != 0 {
-				t.Fatalf("version: code=%d out=%q diagnostics=%q", code, &out, &diag)
-			}
+		var out, diag bytes.Buffer
+		code := Run(context.Background(), []string{"--version"}, &out, &diag, terminal)
+		if code != 0 || out.String() != "portbook dev (commit unknown)\n" || diag.Len() != 0 {
+			t.Fatalf("version: code=%d out=%q diagnostics=%q", code, &out, &diag)
 		}
 	}
 	entries, err := os.ReadDir(dir)

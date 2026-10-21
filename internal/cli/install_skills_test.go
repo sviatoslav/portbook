@@ -24,8 +24,8 @@ func TestInstallSkillsArgumentsAndNoState(t *testing.T) {
 		agent string
 	}{
 		{[]string{"install-skills"}, "codex"},
-		{[]string{"install-skills", "--agent", "claude-code", "--output", "json"}, "claude-code"},
-		{[]string{"--output", "table", "install-skills", "--agent=codex", "--config-dir", filepath.Join(root, "unused")}, "codex"},
+		{[]string{"install-skills", "--agent", "claude-code"}, "claude-code"},
+		{[]string{"install-skills", "--agent=codex", "--config-dir", filepath.Join(root, "unused")}, "codex"},
 	} {
 		var out, diag bytes.Buffer
 		called := false
@@ -78,11 +78,9 @@ func TestInstallSkillsValidationAndHelp(t *testing.T) {
 			t.Fatalf("%v: %d %q %q", args, code, &out, &diag)
 		}
 	}
-	for _, format := range []string{"table", "json"} {
-		var out, diag bytes.Buffer
-		if code := run(context.Background(), []string{"install-skills", "--help", "--output", format}, &out, &diag, false, skillInstaller{}); code != 0 || !strings.Contains(out.String(), "claude-code") || diag.Len() != 0 {
-			t.Fatalf("help: %d %q %q", code, &out, &diag)
-		}
+	var out, diag bytes.Buffer
+	if code := run(context.Background(), []string{"install-skills", "--help"}, &out, &diag, false, skillInstaller{}); code != 0 || !strings.Contains(out.String(), "claude-code") || diag.Len() != 0 {
+		t.Fatalf("help: %d %q %q", code, &out, &diag)
 	}
 	entries, _ := os.ReadDir(root)
 	if len(entries) != 0 {
@@ -254,9 +252,9 @@ func TestInstallSkillsDiagnosticValueBoundaries(t *testing.T) {
 		json bool
 	}{
 		{[]string{"install-skills", "--agent", "--output=table"}, true},
-		{[]string{"install-skills", "--agent", "--output=json", "--output=table"}, false},
+		{[]string{"install-skills", "--agent", "--output=json", "--output=table"}, true},
 		{[]string{"install-skills", "--bogus", "--agent", "--output=table", "--output=json"}, true},
-		{[]string{"install-skills", "--output=table", "--agent=unknown"}, false},
+		{[]string{"install-skills", "--output=table", "--agent=unknown"}, true},
 	} {
 		var out, diag bytes.Buffer
 		if code := run(context.Background(), tc.args, &out, &diag, false, skillInstaller{}); code != 2 || out.Len() != 0 || strings.HasPrefix(diag.String(), "{") != tc.json {

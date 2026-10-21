@@ -124,6 +124,9 @@ func TestConfigAndIndependentProcessShareOneLock(t *testing.T) {
 	if _, _, err := s.Mutate(context.Background(), func(*ports.Pool) (int, error) { called = true; return 0, nil }); err == nil || called {
 		t.Fatalf("config bypassed shared lock: called=%v err=%v", called, err)
 	}
+	if changed, total, err := s.Reset(context.Background()); err == nil || changed != 0 || total != 0 {
+		t.Fatal("reset bypassed independent process lock", changed, total, err)
+	}
 	after, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("simulated operation rewrote config: %q %v", after, err)

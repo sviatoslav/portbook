@@ -104,7 +104,7 @@ func TestCleanupListReleaseReserveCombinedLifecycle(t *testing.T) {
 	if rows := listEntries(t, run(t, cfg, 0, "list", "--all", "--config-dir", alternate)); len(rows) != 5 {
 		t.Fatal(rows)
 	}
-	released := releaseJSON(t, run(t, cfg, 0, "release", "default", "--directory", live, "--config-dir", alternate))
+	released := releaseReceipt(t, run(t, cfg, 0, "release", "default", "--directory", live, "--config-dir", alternate))
 	if !released.Released || released.Port == nil || *released.Port != candidates[4] {
 		t.Fatal(released)
 	}

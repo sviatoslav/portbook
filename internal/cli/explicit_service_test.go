@@ -50,9 +50,8 @@ func TestExplicitServiceRequiredBeforeStateAccess(t *testing.T) {
 			for _, command := range []string{"get", "reserve", "release"} {
 				for _, args := range [][]string{
 					{command}, {command, "--directory", owner},
-					{"--output", "json", command}, {command, "--output", "table"},
-					{"--config-dir", cfg, command, "--directory", owner, "--output", "json"},
-					{command, "--directory", owner, "--config-dir", cfg, "--output", "table", "--"},
+					{"--config-dir", cfg, command, "--directory", owner},
+					{command, "--directory", owner, "--config-dir", cfg, "--"},
 				} {
 					var out, diag bytes.Buffer
 					if code := Run(context.Background(), args, &out, &diag, terminal); code != 2 || out.Len() != 0 || !strings.Contains(diag.String(), "requires exactly one service") {
@@ -104,7 +103,7 @@ func TestExplicitServiceHelpValidation(t *testing.T) {
 	owner := t.TempDir()
 	for _, terminal := range []bool{false, true} {
 		for _, command := range []string{"get", "reserve", "release"} {
-			for _, args := range [][]string{{command, "--help"}, {command, "--directory", owner, "--help"}, {"--output", "table", command, "--help"}, {command, "api", "--help"}} {
+			for _, args := range [][]string{{command, "--help"}, {command, "--directory", owner, "--help"}, {command, "api", "--help"}} {
 				var out, diag bytes.Buffer
 				if code := Run(context.Background(), args, &out, &diag, terminal); code != 0 || diag.Len() != 0 || !strings.Contains(out.String(), command+" SERVICE") || strings.Contains(out.String(), "[SERVICE]") {
 					t.Fatal(args, code, out.String(), diag.String())
