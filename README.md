@@ -14,9 +14,9 @@ No Go installation is required. Homebrew and [release downloads](https://github.
 support macOS and Linux on Intel/AMD x86-64 and ARM64.
 See [installation, source builds, updates, and uninstalling](docs/INSTALLING.md).
 
-These commands target **Portbook v0.2.0 or newer**. Check `portbook --version`
-and see the [release notes and migration](docs/RELEASING.md#v020-release-notes-and-migration)
-when upgrading from v0.1.0. Select an available version from
+These commands target **Portbook v0.3.0 or newer**. Check `portbook --version`
+and see the [release notes and migration](docs/RELEASING.md#v030-release-notes-and-migration)
+when upgrading from earlier versions. Select an available version from
 [GitHub Releases](https://github.com/sviatoslav/portbook/releases).
 
 ## Commands
@@ -58,9 +58,9 @@ Ranges are inclusive. Additions form a union; removals subtract ports.
 Pool changes preserve existing bookings. See the [configuration guide](docs/REFERENCE.md#configuring-the-port-pool)
 for custom pools and location selection.
 
-`config reset`, command-scoped `--output`, and plain-only release confirmations
-are unreleased changes in this checkout. Published v0.2.0 has no pool reset,
-uses a global output flag, and emits JSON release receipts when piped.
+Version 0.3.0 adds `config reset`, scopes `--output` to structured commands, and
+always prints plain release confirmations. See the migration notes when upgrading
+from v0.2.0.
 
 ### Flags and help
 

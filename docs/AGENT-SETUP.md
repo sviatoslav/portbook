@@ -8,7 +8,7 @@ portbook --version
 ```
 
 The published v0.1.0 binary has neither `get` nor `install-skills` and uses the
-older create-or-return lifecycle. The skill targets **Portbook 0.2.0 or newer**;
+older create-or-return lifecycle. The skill targets **Portbook 0.3.0 or newer**;
 check the installed binary’s actual features. A compatible source build can
 also be checked directly:
 
@@ -24,7 +24,9 @@ owner-scoped `release --all`, and the installer. Check version and scoped help
 when using another binary; a version label alone is insufficient, and published
 v0.1.0 cannot run this workflow. The reusable
 skill is already published in the [skills repository](https://github.com/sviatoslav/portbook-skills)
-and can be installed independently. Use it only with a compatible Portbook build.
+and can be installed independently. Use it only with a compatible Portbook build. In v0.3.0, `--output` is supported
+only by `list`, `cleanup`, and `config`, after the command name. Release success
+is plain text; check its exit status rather than parsing a JSON receipt.
 
 ## Install the skill
 

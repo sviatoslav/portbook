@@ -6,6 +6,34 @@ This guide covers local snapshot checks and intentional release publication.
 The public project uses the MIT license in `LICENSE`. Creating/pushing version
 tags and publishing releases require explicit user authorization.
 
+## v0.3.0 release notes and migration
+
+The target tag is `v0.3.0`; check [GitHub Releases](https://github.com/sviatoslav/portbook/releases)
+for published assets. Version and commit are injected from the tag, as before.
+
+- Add `config reset` to restore the selected pool to 49152–65535 (16,384 ports)
+  in one global-lock transaction and atomic save. It uses the shared defaults,
+  preserves bookings and location selection, and fails closed on corrupt or
+  unreadable configuration. Like other pool mutations it persists explicit
+  defaults even when unchanged; `changed` counts added and removed memberships.
+- Scope `--output table|json` to `list`, `cleanup`, and the `config` subtree.
+  Put it after a supported command. Get, reserve, release, install-skills,
+  root help, and version reject the flag without changing state.
+- Always print plain single/bulk release confirmations, on terminals and pipes.
+  Release still removes only the selected booking records, without probes or
+  stopping listeners. Missing bookings and error/exit-code contracts remain unchanged.
+
+For scripts upgrading from v0.2.0, replace `portbook --output json list` with
+`portbook list --output json`, and apply the same placement to config/cleanup.
+Remove output flags from plain commands. Check release exit status and stderr;
+do not decode its success output as JSON. Use `config reset` for pool contents;
+`config path reset` still changes only the saved location choice. Existing config
+and booking files remain compatible and require no migration.
+
+The matching agent skill targets v0.3.0+, checks scoped help without unsupported
+output flags, and treats release confirmation as plain text. Updating the public
+skill or tap is separate from tagging the binary; follow the verification steps below.
+
 ## v0.2.0 release notes and migration
 
 The target tag is `v0.2.0`; check [GitHub Releases](https://github.com/sviatoslav/portbook/releases)
@@ -39,7 +67,7 @@ listener shutdown or proof of OS availability. Existing pool and registry files
 remain compatible; the missing-config pool stays 49152–65535.
 
 Before using the agent workflow, check both `--version` and scoped help against
-[the setup guide](AGENT-SETUP.md). The skill targets Portbook 0.2.0+; an authorized
+[the setup guide](AGENT-SETUP.md). The v0.2.0 skill targeted Portbook 0.2.0+; the current skill targets v0.3.0+. An authorized
 source build with the required features can also be used.
 
 ## Local snapshot verification
@@ -97,7 +125,7 @@ CI results are evidence only after the workflow actually runs.
 Do this only after explicit publication authorization, with the release changes
 merged, a clean checkout, the MIT license included in every archive,
 and passing candidate checks. Replace `vX.Y.Z` below with a new, unused SemVer
-version. The published `v0.1.0` must not be reused. Check remote tags and
+version. Published version tags must not be reused. Check remote tags and
 releases first, and never overwrite an existing published tag or release. The
 current module path supports v0/v1; v2+ requires a module-path migration first.
 
