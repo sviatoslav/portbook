@@ -3,7 +3,6 @@ package cli_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"testing"
@@ -67,20 +66,17 @@ func TestConcurrentResetAndRemoveSnapshots(t *testing.T) {
 		if diags[i].Len() != 0 {
 			t.Fatal(&diags[i])
 		}
-		var res struct {
-			Command        string
-			Changed, Total int
-		}
-		if err := json.Unmarshal(outs[i].Bytes(), &res); err != nil {
-			t.Fatal(err)
-		}
+		verb, changed, total := mutationReceipt(t, outs[i].String())
 		if i%2 == 0 {
-			if res.Command != "config reset" || res.Total != 16384 {
+			if verb != "Reset" || total != 16384 {
 				t.Fatal(outs[i].String())
 			}
-			balance += res.Changed
+			balance += changed
 		} else {
-			balance -= res.Changed
+			if verb != "Removed" {
+				t.Fatal(outs[i].String())
+			}
+			balance -= changed
 		}
 	}
 	cancel()

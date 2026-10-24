@@ -94,7 +94,11 @@ func TestAgreedSequence(t *testing.T) {
 		{[]string{"config", "add", "50000"}, "Added 0 ports. Total: 129 ports.\n"},
 		{[]string{"config", "remove", "--all"}, "Removed 129 ports. Total: 0 ports.\n"},
 	} {
-		got := run(t, dir, 0, append(append([]string{}, s.args...), "--output", "table")...)
+		args := append([]string{}, s.args...)
+		if args[1] == "show" {
+			args = append(args, "--output", "table")
+		}
+		got := run(t, dir, 0, args...)
 		if strings.Join(strings.Fields(got), " ") != strings.Join(strings.Fields(s.want), " ") {
 			t.Fatalf("%v: %q != %q", s.args, got, s.want)
 		}
@@ -115,7 +119,7 @@ func TestAgreedSequence(t *testing.T) {
 func TestJSONAndInvalidInputsNoMutation(t *testing.T) {
 	dir := t.TempDir()
 	run(t, dir, 0, "config", "remove", "--all")
-	if got := run(t, dir, 0, "config", "add", "1", "65535"); got != "{\"command\":\"config add\",\"changed\":2,\"total\":2}\n" {
+	if got := run(t, dir, 0, "config", "add", "1", "65535"); got != "Added 2 ports. Total: 2 ports.\n" {
 		t.Fatal(got)
 	}
 	before, err := os.ReadFile(filepath.Join(dir, "config.json"))
@@ -208,13 +212,8 @@ func TestIndependentConcurrentProcesses(t *testing.T) {
 			if err := cmd.Wait(); err != nil {
 				t.Fatalf("worker %d: %v %s", i, err, &diags[i])
 			}
-			var res struct {
-				Changed int `json:"changed"`
-			}
-			if err := json.Unmarshal(outs[i].Bytes(), &res); err != nil {
-				t.Fatal(err)
-			}
-			changed += res.Changed
+			_, count, _ := mutationReceipt(t, outs[i].String())
+			changed += count
 		}
 		want := workers * 2
 		if remove {
@@ -266,14 +265,35 @@ func TestDefaultPoolReadOnlyAndFirstConfigMutations(t *testing.T) {
 			t.Fatal("default read wrote state", path, err)
 		}
 	}
-	if got := run(t, dir, 0, "config", "add", "49150-49153"); got != "{\"command\":\"config add\",\"changed\":2,\"total\":16386}\n" {
+	if got := run(t, dir, 0, "config", "add", "49150-49153"); got != "Added 2 ports. Total: 16386 ports.\n" {
 		t.Fatal(got)
 	}
-	if got := run(t, dir, 0, "config", "remove", "49150-49153"); got != "{\"command\":\"config remove\",\"changed\":4,\"total\":16382}\n" {
+	if got := run(t, dir, 0, "config", "remove", "49150-49153"); got != "Removed 4 ports. Total: 16382 ports.\n" {
 		t.Fatal(got)
 	}
 	run(t, dir, 0, "config", "remove", "--all")
 	if got := run(t, dir, 0, "config", "show"); got != "{\"command\":\"config show\",\"ranges\":[],\"total\":0}\n" {
 		t.Fatal("empty config fell back", got)
 	}
+}
+
+// Parse and verify the complete public plain confirmation for process accounting.
+func mutationReceipt(t *testing.T, output string) (string, int, int) {
+	t.Helper()
+	var verb, changedNoun, totalNoun string
+	var changed, total int
+	if n, err := fmt.Sscanf(output, "%s %d %s Total: %d %s", &verb, &changed, &changedNoun, &total, &totalNoun); err != nil || n != 5 {
+		t.Fatalf("invalid confirmation %q: %v", output, err)
+	}
+	noun := func(n int) string {
+		if n == 1 {
+			return "port"
+		}
+		return "ports"
+	}
+	want := fmt.Sprintf("%s %d %s. Total: %d %s.\n", verb, changed, noun(changed), total, noun(total))
+	if output != want || (verb != "Added" && verb != "Removed" && verb != "Reset") {
+		t.Fatalf("invalid confirmation %q", output)
+	}
+	return verb, changed, total
 }

@@ -108,7 +108,7 @@ def smoke(binary, temp, version, commit):
         return result.stdout if code == 0 else result.stderr
     require(run("--version") == f"portbook {version} (commit {commit})\n", "release version output mismatch")
     require("Usage:" in json.loads(run("--help"))["help"], "JSON help mismatch")
-    require("Usage:" in run("config", "--output", "table", "--help"), "table help mismatch")
+    require("Usage:" in run("config", "show", "--output", "table", "--help"), "table help mismatch")
     require("claude-code" in json.loads(run("install-skills", "--help"))["help"], "installer help")
     fake_bin = temp / "fake-bin"
     fake_bin.mkdir()
@@ -154,14 +154,38 @@ def smoke(binary, temp, version, commit):
     require(not Path(env["PORTBOOK_CONFIG_DIR"]).exists(), "reserve persisted default config")
     rows = json.loads(run("list"))["bookings"]
     require(rows == [{"directory": str(temp), "service": "api", "port": int(api)}, {"directory": str(temp), "service": "default", "port": int(default)}], "README list bookings")
-    require(json.loads(run("config", "remove", "--all"))["changed"] == 16384, "explicit empty pool")
+    require(run("config", "remove", "--all") == "Removed 16384 ports. Total: 0 ports.\n", "explicit empty pool")
     require(run("get", "api") == api, "empty-pool get")
     require(json.loads(run("reserve", "new", code=1))["error"]["code"] == "runtime_error", "empty pool must disable new allocations")
-    require(json.loads(run("config", "reset")) == {"command": "config reset", "changed": 16384, "total": 16384}, "pool reset defaults")
+    require(run("config", "reset") == "Reset 16384 ports. Total: 16384 ports.\n", "pool reset defaults")
     require(registry.read_bytes() == before, "pool reset rewrote bookings")
-    require(json.loads(run("config", "reset"))["changed"] == 0, "idempotent pool reset")
+    require(run("config", "reset") == "Reset 0 ports. Total: 16384 ports.\n", "idempotent pool reset")
     require(json.loads(run("config", "show"))["ranges"] == [{"start": 49152, "end": 65535}], "reset normalized ranges")
-    run("config", "remove", "--all")
+    require(run("config", "add", "49152") == "Added 0 ports. Total: 16384 ports.\n", "idempotent add")
+    target = temp / "saved-choice"
+    details = f'Effective directory: {env["PORTBOOK_CONFIG_DIR"]}\nConfig file: {env["PORTBOOK_CONFIG_DIR"]}/config.json\nSource: environment\n'
+    for _ in range(2):
+        require(run("config", "path", "set", str(target)) == f"Saved directory: {target}\n" + details, "plain path set with override")
+    state_before = {p: p.read_bytes() for p in temp.rglob("*") if p.is_file()}
+    for args in (
+        ("config", "add", "1"), ("config", "remove", "49152"), ("config", "remove", "--all"),
+        ("config", "reset"), ("config", "path", "set", str(target)), ("config", "path", "reset"),
+        ("config",), ("config", "path"),
+    ):
+        for flag in (("--output", "json"), ("--output=table", "--help")):
+            require(json.loads(run(*args, *flag, code=2))["error"]["code"] == "usage_error", f"unsupported config output: {args}")
+    for args in (("config", "--output=json", "show"), ("config", "path", "--output=table", "get")):
+        require(json.loads(run(*args, code=2))["error"]["code"] == "usage_error", "nested prefix output")
+    require(state_before == {p: p.read_bytes() for p in temp.rglob("*") if p.is_file()}, "unsupported output mutated state")
+    for _ in range(2):
+        require(run("config", "path", "reset") == "Saved directory: (none; OS default)\n" + details, "plain path reset with override")
+    require(run("config", "remove", "49152") == "Removed 1 port. Total: 16383 ports.\n", "plain remove")
+    require(run("config", "remove", "49152") == "Removed 0 ports. Total: 16383 ports.\n", "idempotent remove")
+    require(run("config", "remove", "--all") == "Removed 16383 ports. Total: 0 ports.\n", "plain clear")
+    require(run("config", "remove", "--all") == "Removed 0 ports. Total: 0 ports.\n", "idempotent clear")
+    for args in (("list",), ("cleanup", "--dry-run"), ("config", "show"), ("config", "path", "get")):
+        require(isinstance(json.loads(run(*args, "--output=json")), dict), "leaf JSON override")
+        require(not run(*args, "--output=table").startswith("{"), "leaf table override")
     previous_path = env.get("PATH")
     env["PATH"] = str(temp / "no-executables")
     try:
@@ -186,7 +210,7 @@ def smoke(binary, temp, version, commit):
         require(missing["code"] == "runtime_error" and "reservation not found" in missing["message"], f"missing {command}")
     require(registry.read_bytes() == before and registry.stat().st_ino == identity.st_ino and registry.stat().st_mtime_ns == identity.st_mtime_ns, "missing lifecycle command rewrote state")
     require(run("release", "default") == f'Released port {int(default)} for "default" in "{temp}".\n', "release default")
-    require(json.loads(run("config", "add", "49152-65535"))["total"] == 16384, "custom pool")
+    require(run("config", "add", "49152-65535") == "Added 16384 ports. Total: 16384 ports.\n", "custom pool")
     busy = run("reserve", "busy")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", int(busy)))

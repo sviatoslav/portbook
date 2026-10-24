@@ -33,7 +33,7 @@ func TestLocationEnvironmentPrecedenceAndDiagnostics(t *testing.T) {
 		return diag.String()
 	}
 	got := invoke(0, "config", "path", "set", flag)
-	if !strings.Contains(got, `"source":"environment"`) || !strings.Contains(got, `"directory":"`+env+`"`) {
+	if !strings.Contains(got, "Source: environment") || !strings.Contains(got, "Effective directory: "+env) {
 		t.Fatal(got)
 	}
 	got = invoke(0, "config", "path", "get", "--config-dir", flag)

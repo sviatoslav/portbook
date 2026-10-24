@@ -2,9 +2,11 @@
 
 [Back to README](../README.md) · [Installation](INSTALLING.md) · [Development](DEVELOPING.md)
 
-This reference describes the v0.3.0 interface. Version 0.2.0 has no pool reset,
-accepts global output flags, and emits JSON release receipts when piped; see
-[the migration notes](RELEASING.md#v030-release-notes-and-migration) before upgrading.
+This reference describes this checkout, including the **unreleased** plain config
+mutation confirmations and exact-leaf output flags. Published v0.3.0 accepts
+`--output` throughout the config subtree and emits JSON config mutation receipts
+when piped. Version 0.2.0 has no pool reset, accepts global output flags, and emits
+JSON release receipts when piped; see [release migration notes](RELEASING.md).
 Check `portbook --version` against the installed binary.
 Published v0.1.0 has no top-level `get`, reuses existing bookings on `reserve`,
 and succeeds on missing `release`. It also selects `default` when the service is
@@ -281,14 +283,21 @@ terminals and pipes. Neither accepts `--output`. Their help and errors use the
 terminal-dependent defaults below. Release success is always a plain confirmation;
 its errors and help also use those defaults.
 
-For configuration, list, and cleanup commands, terminal stdout is human-readable text/tables.
-When stdout is piped, redirected, or otherwise noninteractive, it is JSON. `--output table` or
-`--output json` overrides this after a supported command; `--output=json` also
-works. It is local to `list` and `cleanup`, and inherited throughout
-`config`. For example, use `portbook list --output json` or
-`portbook config --output table show`. Root-prefix `portbook --output json list`
-is invalid, as is `--output` on `get`, `reserve`, `release`, `install-skills`, root help,
-or `--version`. `--help` / `-h` describes commands and examples and follows this convention
+Config add, remove (including `--all`), and reset always print plain count
+confirmations on terminals and pipes. Config path set/reset always print plain
+saved directory, effective directory, config file, and source lines, including
+active overrides. These commands reject `--output` before mutation.
+
+Only `list`, `cleanup`, `config show`, and `config path get` support structured
+output: table/text on terminal stdout, JSON when piped or redirected. A local
+`--output table|json` (also `--output=json`) overrides this after the complete
+command path, for example `portbook config show --output json`.
+Groups do not inherit the flag: `config --output json show` and
+`config path --output json get` are invalid, as is root-prefix
+`portbook --output json list`. All other commands reject `--output`.
+Help and errors use the terminal-dependent defaults even on plain commands;
+only the four supported leaves permit an explicit override.
+`--help` / `-h` describes commands and examples
 (JSON help has `command` and `help` fields). Help is scoped to the resolved
 command: `portbook config remove --help` describes removal and `--all`.
 Unknown command paths, unknown/inapplicable flags, invalid supplied operands,
@@ -304,7 +313,7 @@ Portbook state commands have no prompts; `install-skills` inherits third-party
 confirmation and output.
 
 A correctly scoped output override also applies to diagnostics when an earlier
-flag is invalid. Unsupported or root-prefix output flags never select the
+flag is invalid. Unsupported output flags, including flags before a complete command path, never select the
 diagnostic format; those errors use the terminal-dependent default.
 For malformed or repeated output options, diagnostics use the first selection
 before `--` if its value is `table` or `json`; otherwise they use the terminal
@@ -325,23 +334,11 @@ Stable Portbook JSON schemas:
 ```
 
 ```json
-{"command":"config add","changed":100,"total":100}
-```
-
-```json
-{"command":"config remove","changed":0,"total":100}
-```
-
-```json
-{"command":"config reset","changed":16384,"total":16384}
-```
-
-```json
 {"error":{"code":"usage_error","message":"..."}}
 ```
 
-`changed` and `total` always count ports. `remove --all` uses the same removal
-schema. Empty range arrays are `[]`, never `null`. Error codes are `usage_error`,
+Plain mutation confirmations count changed memberships and the total number of ports.
+`remove --all` uses the same removal wording. Empty range arrays are `[]`, never `null`. Error codes are `usage_error`,
 `storage_error`, or `runtime_error`; message text provides details and may vary
 with OS errors. Exit codes are 0 for success, 1 for runtime/storage failures,
 and 2 for invalid commands, flags, or operands. If output fails after saving,
@@ -372,19 +369,19 @@ it changes pool contents, not location selection.
 
 Like add/remove, reset saves a canonical version-1 config even if the file was
 missing or the effective pool already matched the defaults. Repeated resets
-succeed with `changed: 0`. For reset, `changed` counts added plus removed port
-memberships; `total` is always 16,384 on success. Corrupt, duplicate-member,
+print `Reset 0 ports. Total: 16384 ports.` For reset, the changed count includes
+added plus removed memberships; the total is always 16,384 on success. Corrupt, duplicate-member,
 unsupported-version, unreadable, or nonregular config evidence is preserved on
 failure; reset is not a repair command. It also does not repair a corrupt saved
 pointer. Use `config show` to inspect the normalized resulting range.
 
 ```console
-$ portbook config remove --all --output table
+$ portbook config remove --all
 Removed 16384 ports. Total: 0 ports.
-$ portbook config reset --output table
+$ portbook config reset
 Reset 16384 ports. Total: 16384 ports.
-$ portbook config reset --output json
-{"command":"config reset","changed":0,"total":16384}
+$ portbook config reset
+Reset 0 ports. Total: 16384 ports.
 ```
 
 An illustrative sequence on a fresh installation, starting by explicitly clearing
@@ -392,28 +389,28 @@ the effective default pool,
 using table output so it is reproducible when captured:
 
 ```text
-$ portbook config remove --output table --all
+$ portbook config remove --all
 Removed 16384 ports. Total: 0 ports.
-$ portbook config add --output table 50000-50099
+$ portbook config add 50000-50099
 Added 100 ports. Total: 100 ports.
-$ portbook config add --output table 50050-50149
+$ portbook config add 50050-50149
 Added 50 ports. Total: 150 ports.
 $ portbook config show --output table
 RANGE        PORTS
 50000-50149  150
 Total: 150 ports.
-$ portbook config remove --output table 50040-50059
+$ portbook config remove 50040-50059
 Removed 20 ports. Total: 130 ports.
 $ portbook config show --output table
 RANGE        PORTS
 50000-50039  40
 50060-50149  90
 Total: 130 ports.
-$ portbook config remove --output table 50149
+$ portbook config remove 50149
 Removed 1 port. Total: 129 ports.
-$ portbook config add --output table 50000
+$ portbook config add 50000
 Added 0 ports. Total: 129 ports.
-$ portbook config remove --output table --all
+$ portbook config remove --all
 Removed 129 ports. Total: 0 ports.
 $ portbook config show --output table
 No port ranges configured.
@@ -496,8 +493,8 @@ For an isolated configuration selection (coordination still uses the fixed root)
 
 ```sh
 export PORTBOOK_CONFIG_DIR="$(mktemp -d)"
-portbook config remove --output table --all
-portbook config add --output table 50000-50499
+portbook config remove --all
+portbook config add 50000-50499
 portbook config show --output json
 ```
 

@@ -25,9 +25,11 @@
 - Preserve the command paths, port-set semantics, table/JSON output, error schema,
   and exit codes documented in docs/REFERENCE.md. Define commands and flags in Cobra;
   use explicit handlers rather than dispatching mutations by command strings.
-- `--output` is scoped to list, cleanup, and the config subtree; root,
-  get, reserve, release, install-skills, and version reject it. Root-prefix output flags
-  must fail even though Cobra can otherwise accept leaf flags before commands.
+- `--output` is local only to the exact leaves list, cleanup, config show, and
+  config path get. Config add/remove/reset and path set/reset always print plain
+  human confirmations on terminals and pipes. Groups and all other commands
+  reject --output. Flags before the complete supported command path must fail
+  even though Cobra can otherwise accept leaf flags before commands.
 - Help is scoped. Resolve paths and validate applicable flags and supplied
   operands before rendering help; missing required operands may be omitted for
   help. Keep Cobra's automatic diagnostics disabled to preserve output contracts.

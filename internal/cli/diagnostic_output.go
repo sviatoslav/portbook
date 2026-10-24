@@ -55,9 +55,10 @@ func diagnosticOutput(args []string, fallback string, cmd *cobra.Command) string
 	return fallback
 }
 
-// outputScopeStart finds the first command using the root's Cobra metadata.
-// It consumes root flag values so an output-shaped config path is not treated
-// as a flag. Cobra still owns all operand/flag validation and command dispatch.
+// outputScopeStart walks command groups until a leaf defines its own output
+// flag. Prefix flags cannot borrow a descendant's output flag through Cobra's
+// command search. Known flag values are consumed, including output-shaped paths.
+// Cobra still owns operand/flag validation and command dispatch.
 func outputScopeStart(args []string, root *cobra.Command) (start int, misplaced bool) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -78,12 +79,20 @@ func outputScopeStart(args []string, root *cobra.Command) (start int, misplaced 
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
+		found := false
 		for _, child := range root.Commands() {
 			if child.Name() == arg {
-				return i + 1, misplaced
+				found = true
+				if child.Flags().Lookup("output") != nil {
+					return i + 1, misplaced
+				}
+				root = child
+				break
 			}
 		}
-		break
+		if !found {
+			break
+		}
 	}
 	return -1, misplaced
 }

@@ -6,6 +6,21 @@ This guide covers local snapshot checks and intentional release publication.
 The public project uses the MIT license in `LICENSE`. Creating/pushing version
 tags and publishing releases require explicit user authorization.
 
+## Unreleased output changes
+
+Config add, remove (including `--all`), reset, and path set/reset always print
+plain human confirmations on terminals and pipes. They reject `--output`.
+Only the exact leaves `list`, `cleanup`, `config show`, and `config path get`
+accept the flag, after the complete command path. Replace
+`config --output json show` with `config show --output json`, and remove output
+flags and JSON receipt parsing from config mutations. Inspect structured state
+with `config show` or `config path get` when needed. Storage, selection precedence,
+error defaults, and exit codes remain unchanged.
+
+These changes are not in published v0.3.0. Before a future release, update the
+public skill's output and pool reset guidance and the Homebrew formula's reset
+test; their v0.3.0 instructions still use JSON config mutation receipts.
+
 ## v0.3.0 release notes and migration
 
 The target tag is `v0.3.0`; check [GitHub Releases](https://github.com/sviatoslav/portbook/releases)

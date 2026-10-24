@@ -28,6 +28,13 @@ and can be installed independently. Use it only with a compatible Portbook build
 only by `list`, `cleanup`, and `config`, after the command name. Release success
 is plain text; check its exit status rather than parsing a JSON receipt.
 
+This checkout's **unreleased** change further limits `--output` to the exact
+leaves `list`, `cleanup`, `config show`, and `config path get`. Config mutations
+always print plain confirmations and reject output flags; use a structured read
+to inspect the resulting state. The published v0.3.0 skill's JSON pool-reset
+examples need updating before use with this change. Check scoped help against
+the actual binary.
+
 ## Install the skill
 
 Install Node.js with npm/npx, then use a compatible Portbook build:
