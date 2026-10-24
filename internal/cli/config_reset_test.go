@@ -92,7 +92,7 @@ func TestConfigResetSelectionAndPreservedState(t *testing.T) {
 				}
 			}
 			got := resetInvoke(t, 0, args...)
-			if got != "{\"command\":\"config reset\",\"changed\":16386,\"total\":16384}\n" {
+			if got != "Reset 16386 ports. Total: 16384 ports.\n" {
 				t.Fatal(got)
 			}
 			pool, err := (config.Store{Coordinator: c, Location: &config.Location{Flag: selected, FlagSet: true}}).Read()
@@ -110,7 +110,7 @@ func TestConfigResetSelectionAndPreservedState(t *testing.T) {
 					t.Fatal("reset created pointer", err)
 				}
 			}
-			got = resetInvoke(t, 0, append(args, "--output", "table")...)
+			got = resetInvoke(t, 0, args...)
 			if got != "Reset 0 ports. Total: 16384 ports.\n" {
 				t.Fatal(got)
 			}

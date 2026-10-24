@@ -48,13 +48,7 @@ func noun(n int) string {
 
 func render(w io.Writer, format string, res result) error {
 	if res.Path != nil {
-		if format == "json" {
-			if res.Path.Changed {
-				return json.NewEncoder(w).Encode(struct {
-					Command string `json:"command"`
-					*pathResult
-				}{res.Command, res.Path})
-			}
+		if format == "json" && !res.Path.Changed {
 			return json.NewEncoder(w).Encode(struct {
 				Command string `json:"command"`
 				config.Selection
@@ -72,17 +66,6 @@ func render(w io.Writer, format string, res result) error {
 		_, err := fmt.Fprintf(w, "Effective directory: %s\nConfig file: %s\nSource: %s\n", res.Path.Directory, res.Path.ConfigFile, res.Path.Source)
 		return err
 	}
-	if format == "json" {
-		// The empty show result must carry [] rather than omit ranges.
-		if res.Changed == nil {
-			return json.NewEncoder(w).Encode(struct {
-				Command string        `json:"command"`
-				Ranges  []ports.Range `json:"ranges"`
-				Total   int           `json:"total"`
-			}{res.Command, res.Ranges, res.Total})
-		}
-		return json.NewEncoder(w).Encode(res)
-	}
 	if res.Changed != nil {
 		verb := "Added"
 		if res.Command == "config remove" {
@@ -92,6 +75,14 @@ func render(w io.Writer, format string, res result) error {
 		}
 		_, err := fmt.Fprintf(w, "%s %d %s. Total: %d %s.\n", verb, *res.Changed, noun(*res.Changed), res.Total, noun(res.Total))
 		return err
+	}
+	if format == "json" {
+		// The empty show result must carry [] rather than omit ranges.
+		return json.NewEncoder(w).Encode(struct {
+			Command string        `json:"command"`
+			Ranges  []ports.Range `json:"ranges"`
+			Total   int           `json:"total"`
+		}{res.Command, res.Ranges, res.Total})
 	}
 	if len(res.Ranges) == 0 {
 		if _, err := fmt.Fprintln(w, "No port ranges configured."); err != nil {

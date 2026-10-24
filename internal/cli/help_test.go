@@ -80,7 +80,7 @@ func TestEndOfFlags(t *testing.T) {
 	t.Setenv("PORTBOOK_CONFIG_DIR", t.TempDir())
 	var out, diag bytes.Buffer
 	args := []string{"config", "add", "--", "1"}
-	if code := Run(context.Background(), args, &out, &diag, false); code != 0 || !strings.Contains(out.String(), `"changed":1`) {
+	if code := Run(context.Background(), args, &out, &diag, false); code != 0 || out.String() != "Added 1 port. Total: 16385 ports.\n" {
 		t.Fatalf("%d %s %s", code, &out, &diag)
 	}
 	out.Reset()

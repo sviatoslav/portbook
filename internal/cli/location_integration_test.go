@@ -71,7 +71,7 @@ func TestLocationCLIAndPersistence(t *testing.T) {
 	}
 	target := filepath.Join(t.TempDir(), "custom")
 	got := locationRun(t, home, 0, "config", "path", "set", target)
-	if !strings.Contains(got, `"source":"saved"`) || !strings.Contains(got, `"saved_directory":`) {
+	if !strings.Contains(got, "Source: saved") || !strings.Contains(got, "Saved directory: "+target) {
 		t.Fatal(got)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -85,10 +85,10 @@ func TestLocationCLIAndPersistence(t *testing.T) {
 	}
 	other := t.TempDir()
 	got = locationRun(t, home, 0, "config", "path", "set", other, "--config-dir", target)
-	if !strings.Contains(got, `"source":"flag"`) || !strings.Contains(got, `"saved_directory":"`+other+`"`) {
+	if !strings.Contains(got, "Source: flag") || !strings.Contains(got, "Saved directory: "+other) {
 		t.Fatal(got)
 	}
-	got = locationRun(t, home, 0, "--config-dir", target, "config", "path", "reset", "--output=table")
+	got = locationRun(t, home, 0, "--config-dir", target, "config", "path", "reset")
 	if !strings.Contains(got, "Saved directory: (none; OS default)") || !strings.Contains(got, "Source: flag") {
 		t.Fatal(got)
 	}

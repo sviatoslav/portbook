@@ -14,7 +14,8 @@ No Go installation is required. Homebrew and [release downloads](https://github.
 support macOS and Linux on Intel/AMD x86-64 and ARM64.
 See [installation, source builds, updates, and uninstalling](docs/INSTALLING.md).
 
-These commands target **Portbook v0.3.0 or newer**. Check `portbook --version`
+The named-service workflow requires **Portbook v0.3.0 or newer**. This checkout also
+includes the unreleased output changes described below. Check `portbook --version`
 and see the [release notes and migration](docs/RELEASING.md#v030-release-notes-and-migration)
 when upgrading from earlier versions. Select an available version from
 [GitHub Releases](https://github.com/sviatoslav/portbook/releases).
@@ -66,14 +67,17 @@ from v0.2.0.
 
 | Flag | Arguments/options | Description |
 | --- | --- | --- |
-| `--output` | `table` or `json` | Choose the format on `list`, `cleanup`, or the `config` subtree. |
+| `--output` | `table` or `json` | Choose the format on `list`, `cleanup`, `config show`, or `config path get`. |
 | `--config-dir` | `ABSOLUTE_DIRECTORY` | Override pool configuration for this invocation. |
 | `--help`, `-h` | On any command | Show help for that command. |
 | `--version` | On `portbook` only | Print the version and commit. |
 
-Place `--output` after a supported command, such as `portbook list --output json`;
-it is not a root-global flag. `get`, `reserve`, `release`, `install-skills`, root help, and
-`--version` reject it. Structured results default to tables on a terminal and JSON when piped.
+This checkout's **unreleased** output change makes config mutations always print
+plain confirmations, on terminals and pipes. `--output` is accepted only after
+one of the four exact commands above, for example `portbook config show --output json`.
+It is unavailable on command groups and all other commands. Structured results
+default to tables on a terminal and JSON when piped. Published v0.3.0 still supports
+output flags throughout the config subtree and JSON config mutation receipts.
 `install-skills` passes through third-party prompts and output unchanged.
 Configuration overrides never move the shared booking registry.
 
