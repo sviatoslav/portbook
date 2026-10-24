@@ -97,7 +97,7 @@ func TestListTableIdentitiesRemainDistinct(t *testing.T) {
 	names := []string{"server\nname", `"server\nname"`, "line\u2028separator", "right\u202eto-left", "plain", "雪"}
 	seen := map[string]string{}
 	for _, name := range names {
-		cell := listCell(name)
+		cell := humanIdentity(name)
 		if old, ok := seen[cell]; ok {
 			t.Fatalf("distinct identities %q and %q both display as %q", old, name, cell)
 		}
@@ -128,7 +128,7 @@ func TestListTablePreservesBoundarySpaces(t *testing.T) {
 		t.Fatalf("table hides trailing space in identity: %q", plain.String())
 	}
 	for _, name := range []string{" server", "server ", " "} {
-		cell := listCell(name)
+		cell := humanIdentity(name)
 		decoded, err := strconv.Unquote(cell)
 		if err != nil || decoded != name {
 			t.Fatalf("boundary spaces not preserved: %q => %q (%v)", name, cell, err)

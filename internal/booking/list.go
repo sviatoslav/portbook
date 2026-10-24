@@ -1,10 +1,6 @@
 package booking
 
-import (
-	"errors"
-	"path/filepath"
-	"sort"
-)
+import "sort"
 
 // Entry retains the stored owner spelling, including owners that disappeared.
 type Entry struct {
@@ -15,27 +11,17 @@ type Entry struct {
 
 // List reads one atomic registry snapshot without creating or locking anything.
 // An empty directory selects all owners; scoped reads use Reserve's identity rules.
-// Only Config.Coordinator is used: configuration selection is irrelevant here.
+// Configuration selection is irrelevant here.
 func (s Store) List(directory string) ([]Entry, error) {
-	if s.Config.Coordinator.Dir == "" || !filepath.IsAbs(s.Config.Coordinator.Dir) {
-		return nil, errors.New("state directory must be an absolute path")
-	}
+	var r Registry
 	var err error
-	if directory != "" {
-		directory, err = Directory(directory)
-		if err != nil {
-			return nil, err
-		}
+	if directory == "" {
+		r, err = s.read()
+	} else {
+		r, directory, err = s.readOwner(directory)
 	}
-	r, err := s.read()
 	if err != nil {
 		return nil, err
-	}
-	if directory != "" {
-		directory, err = ownerKey(r, directory)
-		if err != nil {
-			return nil, err
-		}
 	}
 	entries := make([]Entry, 0)
 	for owner, services := range r {

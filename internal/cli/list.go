@@ -5,20 +5,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/sviatoslav/portbook/internal/booking"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func newListCommand(o *options, out io.Writer) *cobra.Command {
 	var all bool
 	var directory, owner string
-	cmd := &cobra.Command{
+	cmd := o.command(&cobra.Command{
 		Use: "list", Short: "List bookings for the current directory or all owners",
 		Long:    "List saved bookings without probing ports or reading configuration. Defaults to the current directory, without Git-root discovery. --all includes stored directories that no longer exist. --all and --directory cannot be combined.",
 		Example: "  portbook list\n  portbook list --directory /projects/my-app\n  portbook list --all --output json",
@@ -52,7 +49,7 @@ func newListCommand(o *options, out io.Writer) *cobra.Command {
 			if err != nil {
 				return &commandError{code: "storage_error", err: err}
 			}
-			entries, err := (booking.Store{Config: config.Store{Coordinator: c}}).List(owner)
+			entries, err := (booking.Store{Coordinator: c}).List(owner)
 			if err != nil {
 				return &commandError{code: "storage_error", err: err}
 			}
@@ -61,7 +58,7 @@ func newListCommand(o *options, out io.Writer) *cobra.Command {
 			}
 			return nil
 		},
-	}
+	}, commandPolicy{help: helpIndependent, structuredOutput: true})
 	cmd.Flags().BoolVar(&all, "all", false, "List every owner, including disappeared directories")
 	cmd.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(cmd.Flags().Lookup("all"))
@@ -91,22 +88,13 @@ func renderList(w io.Writer, format string, entries []booking.Entry, all bool) e
 	}
 	for _, entry := range entries {
 		if all {
-			if _, err := fmt.Fprintf(table, "%s\t", listCell(entry.Directory)); err != nil {
+			if _, err := fmt.Fprintf(table, "%s\t", humanIdentity(entry.Directory)); err != nil {
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(table, "%s\t%d\n", listCell(entry.Service), entry.Port); err != nil {
+		if _, err := fmt.Fprintf(table, "%s\t%d\n", humanIdentity(entry.Service), entry.Port); err != nil {
 			return err
 		}
 	}
 	return table.Flush()
-}
-
-// Preserve one table row per booking even when valid identities contain controls.
-// JSON retains the exact identity using the encoder's standard escaping.
-func listCell(value string) string {
-	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\"\\") || strings.IndexFunc(value, func(r rune) bool { return !strconv.IsPrint(r) }) >= 0 {
-		return strconv.Quote(value)
-	}
-	return value
 }

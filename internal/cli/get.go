@@ -7,13 +7,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/sviatoslav/portbook/internal/booking"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func getCommand(o *options, out io.Writer) *cobra.Command {
 	var directory, owner, service string
-	cmd := &cobra.Command{
+	cmd := o.command(&cobra.Command{
 		Use: "get SERVICE", Short: "Get an existing reserved port",
 		Long:    "Read one registry snapshot without locks, writes, configuration reads, or TCP probes. A missing reservation fails. Success prints only the decimal port, and does not accept --output. The owner defaults to cwd, without Git root discovery.",
 		Example: "  portbook get api\n  portbook get api --directory /projects/my-app",
@@ -26,7 +25,7 @@ func getCommand(o *options, out io.Writer) *cobra.Command {
 			if err != nil {
 				return &commandError{code: "storage_error", err: err}
 			}
-			port, err := (booking.Store{Config: config.Store{Coordinator: c}}).Get(owner, service)
+			port, err := (booking.Store{Coordinator: c}).Get(owner, service)
 			if err != nil {
 				code := "storage_error"
 				if errors.Is(err, booking.ErrNotFound) {
@@ -39,9 +38,8 @@ func getCommand(o *options, out io.Writer) *cobra.Command {
 			}
 			return nil
 		},
-	}
+	}, commandPolicy{help: helpIndependent})
 	cmd.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(cmd.Flags().Lookup("directory"))
-	cmd.InitDefaultHelpFlag()
 	return cmd
 }

@@ -47,7 +47,7 @@ func (s Store) releaseRecords(ctx context.Context, directory, service string, al
 		return ReleaseAllResult{}, err
 	}
 	var res ReleaseAllResult
-	err = s.Config.Coordinator.WithLock(ctx, func() error {
+	err = s.Coordinator.WithLock(ctx, func() error {
 		current, err := Directory(directory)
 		if err != nil {
 			return err
@@ -94,7 +94,7 @@ func (s Store) releaseRecords(ctx context.Context, directory, service string, al
 		if err != nil {
 			return err
 		}
-		if err := state.AtomicWrite(s.Config.Coordinator.Dir, File, data); err != nil {
+		if err := state.AtomicWrite(s.Coordinator.Dir, File, data); err != nil {
 			return err
 		}
 		res = ReleaseAllResult{Directory: key, Ports: ports, Released: len(ports)}

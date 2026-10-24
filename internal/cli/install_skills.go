@@ -87,7 +87,7 @@ func defaultSkillInstaller(in io.Reader, out, diagnostics io.Writer) skillInstal
 
 func installSkillsCommand(o *options) *cobra.Command {
 	var agent string
-	cmd := &cobra.Command{
+	cmd := o.command(&cobra.Command{
 		Use: "install-skills", Short: "Install the Portbook agent skill globally using npx skills",
 		Long:    "Install only the portbook skill from sviatoslav/portbook-skills using the third-party Vercel Skills CLI. Requires Node.js/npx and network access. Targets codex (default) or claude-code globally. Reinstallation can replace edited skill files. Installer prompts and output pass through unchanged; --output is not accepted; upstream may skip prompts inside coding agents. No Portbook config or bookings are read or changed. Stops after five minutes.",
 		Example: "  portbook install-skills\n  portbook install-skills --agent claude-code",
@@ -109,10 +109,9 @@ func installSkillsCommand(o *options) *cobra.Command {
 			}
 			return nil
 		},
-	}
+	}, commandPolicy{help: helpIndependent})
 	cmd.Flags().StringVar(&agent, "agent", "codex", "Target agent: codex or claude-code")
 	once(cmd.Flags().Lookup("agent"))
-	cmd.InitDefaultHelpFlag()
 	return cmd
 }
 

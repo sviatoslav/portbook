@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
-	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
@@ -28,10 +28,11 @@ func TestGetSnapshotIgnoresConfigProbeAndLock(t *testing.T) {
 	path := seedRelease(t, s, Registry{canonical: {"default": 45000, "api": 45001}})
 	before := contents(t, path)
 	info, _ := os.Stat(path)
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "location.json"), []byte("broken"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "location.json"), []byte("broken"), 0600)
+	s.ReadPool = func() (ports.Pool, error) { t.Fatal("get read the pool"); return ports.Pool{}, nil }
 	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("get probed"); return false, nil }
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +59,7 @@ func TestGetSnapshotIgnoresConfigProbeAndLock(t *testing.T) {
 func TestGetMissingAndCorruptStatePreservesEvidence(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(t.TempDir(), "uncreated")
-	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	s := Store{Coordinator: state.Coordinator{Dir: root}}
 	if p, err := s.Get(dir, "default"); p != 0 || !errors.Is(err, ErrNotFound) {
 		t.Fatal(p, err)
 	}
@@ -96,7 +97,8 @@ func TestDuplicateReservePreservesSnapshotWithoutProbeOrConfig(t *testing.T) {
 	path := seedRelease(t, s, Registry{canonical: {"default": 45000}})
 	before := contents(t, path)
 	info, _ := os.Stat(path)
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
+	s.ReadPool = func() (ports.Pool, error) { t.Fatal("duplicate read the pool"); return ports.Pool{}, nil }
 	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("duplicate probed"); return false, nil }
 	alias := filepath.Join(t.TempDir(), "alias")
 	if err := os.Symlink(dir, alias); err != nil {
@@ -117,7 +119,7 @@ func TestGetRejectsNonregularAndInaccessibleRegistry(t *testing.T) {
 	for _, kind := range []string{"directory", "symlink", "unreadable"} {
 		t.Run(kind, func(t *testing.T) {
 			s, dir := fixture(t)
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			target := filepath.Join(t.TempDir(), "evidence")
 			data := []byte(`{"version":1,"bookings":{}}`)
 			if err := os.WriteFile(target, data, 0600); err != nil {

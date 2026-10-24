@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
@@ -24,7 +23,7 @@ func cleanupFixture(t *testing.T, r Registry) Store {
 	if err = os.WriteFile(filepath.Join(dir, File), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Store{Config: config.Store{Coordinator: state.Coordinator{Dir: dir, LockTimeout: 30 * time.Millisecond}}, Probe: func(context.Context, int) (bool, error) { return true, nil }}
+	return Store{Coordinator: state.Coordinator{Dir: dir, LockTimeout: 30 * time.Millisecond}, Probe: func(context.Context, int) (bool, error) { return true, nil }}
 }
 func cleanupPath(t *testing.T) string {
 	t.Helper()
@@ -51,7 +50,7 @@ func TestCleanupMixedSnapshotAndIdempotency(t *testing.T) {
 		}
 		return true, nil
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
 	r, err := s.Cleanup(context.Background(), true)
 	if err != nil || r.Removed != 0 || r.WouldRemove != 1 || r.Retained != 3 {
@@ -60,7 +59,7 @@ func TestCleanupMixedSnapshotAndIdempotency(t *testing.T) {
 	if !bytes.Equal(before, contents(t, path)) {
 		t.Fatal("dry run rewrote registry")
 	}
-	if _, err := os.Lstat(filepath.Join(s.Config.Coordinator.Dir, "state.lock")); !os.IsNotExist(err) {
+	if _, err := os.Lstat(filepath.Join(s.Coordinator.Dir, "state.lock")); !os.IsNotExist(err) {
 		t.Fatal("dry run created lock", err)
 	}
 	r, err = s.Cleanup(context.Background(), false)
@@ -108,7 +107,7 @@ func TestCleanupOwnerEvidence(t *testing.T) {
 
 func TestCleanupMissingCorruptionCancellationAndLock(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "absent")
-	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	s := Store{Coordinator: state.Coordinator{Dir: root}}
 	r, err := s.Cleanup(context.Background(), true)
 	if err != nil || r.Rows == nil || len(r.Rows) != 0 {
 		t.Fatal(r, err)
@@ -118,9 +117,9 @@ func TestCleanupMissingCorruptionCancellationAndLock(t *testing.T) {
 	}
 	gone := filepath.Join(cleanupPath(t), "gone")
 	s = cleanupFixture(t, Registry{gone: {"x": 41001}})
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +162,7 @@ func TestCleanupRechecksOwnerAfterProbeAndPreservesOnSaveFailure(t *testing.T) {
 	os.Remove(gone)
 	// Replacing the registry with a directory during the probe makes atomic rename
 	// fail, exercising pre-commit failure without weakening production persistence.
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
 	s.Probe = func(context.Context, int) (bool, error) {
 		if err := os.Rename(path, path+".original"); err != nil {
@@ -200,7 +199,7 @@ func TestCleanupPreservesEmptyOwnersAndDoesNotRewriteNoop(t *testing.T) {
 	if _, ok := saved[gone]; ok {
 		t.Fatal("retained newly emptied owner")
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +222,7 @@ func TestCleanupRetainsOwnerRecreatedByLaterProbe(t *testing.T) {
 			parent := cleanupPath(t)
 			gone := filepath.Join(parent, "gone")
 			s := cleanupFixture(t, Registry{gone: {"a": 41001, "b": 41002}})
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			before := contents(t, path)
 			s.Probe = func(_ context.Context, p int) (bool, error) {
 				if p == 41002 {
@@ -259,7 +258,7 @@ func TestCleanupRetainsChangedParentIdentity(t *testing.T) {
 			}
 			gone := filepath.Join(parent, "gone")
 			s := cleanupFixture(t, Registry{gone: {"x": 41001}})
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			before := contents(t, path)
 			s.Probe = func(context.Context, int) (bool, error) {
 				if err := os.Rename(parent, parent+"-old"); err != nil {
@@ -309,7 +308,7 @@ func TestCleanupCancellationAfterEarlierProposalReleasesLockAndPreservesSnapshot
 		t.Run(map[bool]string{true: "dry", false: "save"}[dry], func(t *testing.T) {
 			gone := filepath.Join(cleanupPath(t), "gone")
 			s := cleanupFixture(t, Registry{gone: {"a": 41001, "b": 41002}})
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			before := contents(t, path)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -330,7 +329,7 @@ func TestCleanupCancellationAfterEarlierProposalReleasesLockAndPreservesSnapshot
 			case <-time.After(5 * time.Second):
 				t.Fatal("second probe never entered")
 			}
-			lockPath := filepath.Join(s.Config.Coordinator.Dir, "state.lock")
+			lockPath := filepath.Join(s.Coordinator.Dir, "state.lock")
 			if !dry {
 				lock := flock.New(lockPath)
 				held, err := lock.TryLock()

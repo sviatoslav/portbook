@@ -27,7 +27,7 @@ func fixture(t *testing.T, ranges ...ports.Range) (Store, string) {
 	if _, _, err := cfg.Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return p.Apply(ranges, true), nil }); err != nil {
 		t.Fatal(err)
 	}
-	return Store{Config: cfg, Probe: func(context.Context, int) (bool, error) { return true, nil }}, t.TempDir()
+	return Store{Coordinator: cfg.Coordinator, ReadPool: cfg.Read, Probe: func(context.Context, int) (bool, error) { return true, nil }}, t.TempDir()
 }
 func contents(t *testing.T, path string) []byte {
 	t.Helper()
@@ -62,9 +62,9 @@ func TestSelectionAndDuplicateReservation(t *testing.T) {
 	if fmt.Sprint(calls) != "[40000 40001 40000 40002 40000 50000]" {
 		t.Fatal(calls)
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
-	if _, _, err := s.Config.Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return 0, nil }); err != nil {
+	if _, _, err := (config.Store{Coordinator: s.Coordinator}).Mutate(context.Background(), func(p *ports.Pool) (int, error) { *p = ports.Pool{}; return 0, nil }); err != nil {
 		t.Fatal(err)
 	}
 	s.Probe = func(context.Context, int) (bool, error) { t.Fatal("duplicate probed"); return false, nil }
@@ -96,7 +96,7 @@ func TestIdentityAndDirectoryValidation(t *testing.T) {
 	}
 	file := filepath.Join(t.TempDir(), "file")
 	os.WriteFile(file, []byte("keep"), 0600)
-	before := contents(t, filepath.Join(s.Config.Coordinator.Dir, File))
+	before := contents(t, filepath.Join(s.Coordinator.Dir, File))
 	for _, target := range []string{"", "relative", filepath.Join(t.TempDir(), "missing"), file, dir + "\x00", dir + string([]byte{255})} {
 		if _, err := s.Reserve(context.Background(), target, "server"); err == nil {
 			t.Fatalf("accepted %q", target)
@@ -107,7 +107,7 @@ func TestIdentityAndDirectoryValidation(t *testing.T) {
 			t.Fatalf("accepted %q", service)
 		}
 	}
-	if !bytes.Equal(before, contents(t, filepath.Join(s.Config.Coordinator.Dir, File))) {
+	if !bytes.Equal(before, contents(t, filepath.Join(s.Coordinator.Dir, File))) {
 		t.Fatal("validation changed registry")
 	}
 	for _, mode := range []os.FileMode{0000, 0400, 0100} {
@@ -161,7 +161,7 @@ func TestStrictCodec(t *testing.T) {
 func TestFailClosedPreservesEvidence(t *testing.T) {
 	for _, bad := range []string{"broken", `{"version":9,"bookings":{}}`, `{"version":1,"bookings":{"/x":{"a":1,"a":2}}}`} {
 		s, dir := fixture(t, ports.Range{Start: 41000, End: 41000})
-		path := filepath.Join(s.Config.Coordinator.Dir, File)
+		path := filepath.Join(s.Coordinator.Dir, File)
 		os.WriteFile(path, []byte(bad), 0600)
 		for i := 0; i < 2; i++ {
 			if _, err := s.Reserve(context.Background(), dir, "a"); err == nil {
@@ -181,7 +181,7 @@ func TestFailClosedPreservesEvidence(t *testing.T) {
 				t.Fatal("probed after accepting nonregular/inaccessible registry")
 				return false, nil
 			}
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			switch kind {
 			case "directory":
 				if err := os.Mkdir(path, 0700); err != nil {
@@ -213,7 +213,7 @@ func TestFailClosedPreservesEvidence(t *testing.T) {
 func TestFailuresNeverSaveAndReleaseLock(t *testing.T) {
 	s, dir := fixture(t, ports.Range{Start: 43000, End: 43002})
 	reserve(t, s, dir, "a")
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
 	abort := errors.New("probe failure")
 	s.Probe = func(context.Context, int) (bool, error) { return false, abort }
@@ -225,7 +225,7 @@ func TestFailuresNeverSaveAndReleaseLock(t *testing.T) {
 	if _, err := s.Reserve(ctx, dir, "b"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	held := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	held := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := held.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -234,20 +234,20 @@ func TestFailuresNeverSaveAndReleaseLock(t *testing.T) {
 	}
 	held.Close()
 	// New allocations fail closed on config and pointer errors.
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("bad"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "config.json"), []byte("bad"), 0600)
 	if _, err := s.Reserve(context.Background(), dir, "new"); err == nil {
 		t.Fatal("ignored corrupt config")
 	}
-	os.Remove(filepath.Join(s.Config.Coordinator.Dir, "config.json"))
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "location.json"), []byte("bad pointer"), 0600)
+	os.Remove(filepath.Join(s.Coordinator.Dir, "config.json"))
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "location.json"), []byte("bad pointer"), 0600)
 	if _, err := s.Reserve(context.Background(), dir, "new"); err == nil {
 		t.Fatal("ignored corrupt pointer")
 	}
-	os.Remove(filepath.Join(s.Config.Coordinator.Dir, "location.json"))
+	os.Remove(filepath.Join(s.Coordinator.Dir, "location.json"))
 	if !bytes.Equal(before, contents(t, path)) {
 		t.Fatal("failure changed prior bookings")
 	}
-	if err := s.Config.Coordinator.WithLock(context.Background(), func() error { return nil }); err != nil {
+	if err := s.Coordinator.WithLock(context.Background(), func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -258,9 +258,9 @@ func TestSaveFailurePreservesPriorBookings(t *testing.T) {
 	}
 	s, dir := fixture(t, ports.Range{Start: 44000, End: 44002})
 	reserve(t, s, dir, "a")
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	before := contents(t, path)
-	root := s.Config.Coordinator.Dir
+	root := s.Coordinator.Dir
 	// Drop parent write permission only after the lock is acquired and read,
 	// exercising the actual atomic writer's precommit failure.
 	s.Probe = func(context.Context, int) (bool, error) { return true, os.Chmod(root, 0500) }
@@ -273,7 +273,7 @@ func TestSaveFailurePreservesPriorBookings(t *testing.T) {
 		t.Fatal("failed save destroyed bookings")
 	}
 	s.Probe = nil
-	if err := s.Config.Coordinator.WithLock(context.Background(), func() error { return nil }); err != nil {
+	if err := s.Coordinator.WithLock(context.Background(), func() error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -303,7 +303,7 @@ func TestRealTCPProbeAndOccupiedGet(t *testing.T) {
 			if _, err := s.Reserve(context.Background(), dir, "new"); !errors.Is(err, ErrExhausted) {
 				t.Fatal(err)
 			}
-			if _, err := os.Stat(filepath.Join(s.Config.Coordinator.Dir, File)); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(s.Coordinator.Dir, File)); !os.IsNotExist(err) {
 				t.Fatal("exhaustion saved", err)
 			}
 			// Seed a valid pre-existing booking, then verify listener presence has no
@@ -313,7 +313,7 @@ func TestRealTCPProbeAndOccupiedGet(t *testing.T) {
 				t.Fatal(err)
 			}
 			data, _ := encode(Registry{canonical: {"server": p}})
-			path := filepath.Join(s.Config.Coordinator.Dir, File)
+			path := filepath.Join(s.Coordinator.Dir, File)
 			os.WriteFile(path, data, 0600)
 			if got := get(t, s, dir, "server"); got != p {
 				t.Fatal(got)
@@ -330,13 +330,13 @@ func TestRealTCPProbeAndOccupiedGet(t *testing.T) {
 
 func TestSelectionUsesGlobalRegistryAndDoesNotWriteConfigOrPointer(t *testing.T) {
 	s, dir := fixture(t, ports.Range{Start: 45000, End: 45000})
-	root := s.Config.Coordinator.Dir
+	root := s.Coordinator.Dir
 	custom := t.TempDir()
-	location := config.Location{Coordinator: s.Config.Coordinator}
+	location := config.Location{Coordinator: s.Coordinator}
 	if _, err := location.Change(context.Background(), custom); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Config.Mutate(context.Background(), func(p *ports.Pool) (int, error) { return p.Apply([]ports.Range{{Start: 45001, End: 45001}}, true), nil }); err != nil {
+	if _, _, err := (config.Store{Coordinator: s.Coordinator}).Mutate(context.Background(), func(p *ports.Pool) (int, error) { return p.Apply([]ports.Range{{Start: 45001, End: 45001}}, true), nil }); err != nil {
 		t.Fatal(err)
 	}
 	// Saved choice is read again at reservation time; no store caches it.
@@ -345,7 +345,7 @@ func TestSelectionUsesGlobalRegistryAndDoesNotWriteConfigOrPointer(t *testing.T)
 	if p := reserve(t, s, dir, "server"); p != 45001 {
 		t.Fatal(p)
 	}
-	s.Config.Location = &config.Location{Flag: root, FlagSet: true, Env: "relative ignored", EnvSet: true}
+	s.ReadPool = (config.Store{Coordinator: s.Coordinator, Location: &config.Location{Flag: root, FlagSet: true, Env: "relative ignored", EnvSet: true}}).Read
 	if p := reserve(t, s, dir, "default"); p != 45000 {
 		t.Fatal(p)
 	}
@@ -379,10 +379,10 @@ func TestReserveBlocksConfigAndPointerMutations(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := s.Reserve(context.Background(), dir, "a"); done <- err }()
 	<-entered
-	if _, _, err := s.Config.Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config callback bypassed reservation lock"); return 0, nil }); err == nil {
+	if _, _, err := (config.Store{Coordinator: s.Coordinator}).Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config callback bypassed reservation lock"); return 0, nil }); err == nil {
 		t.Error("config did not wait")
 	}
-	l := config.Location{Coordinator: s.Config.Coordinator}
+	l := config.Location{Coordinator: s.Coordinator}
 	if _, err := l.Change(context.Background(), t.TempDir()); err == nil {
 		t.Error("pointer did not wait")
 	}
@@ -390,7 +390,7 @@ func TestReserveBlocksConfigAndPointerMutations(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(s.Config.Coordinator.Dir, "location.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(s.Coordinator.Dir, "location.json")); !os.IsNotExist(err) {
 		t.Fatal("pointer mutation committed during reservation", err)
 	}
 }
@@ -403,7 +403,7 @@ func TestCancellationDuringProbeDoesNotSave(t *testing.T) {
 	if p, err := s.Reserve(ctx, dir, "a"); p != 0 || !errors.Is(err, context.Canceled) {
 		t.Fatal(p, err)
 	}
-	if _, err := os.Stat(filepath.Join(s.Config.Coordinator.Dir, File)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(s.Coordinator.Dir, File)); !os.IsNotExist(err) {
 		t.Fatal("cancelled reservation saved", err)
 	}
 }
@@ -500,21 +500,44 @@ func TestAmbiguousPhysicalOwnersFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Reserve(context.Background(), dir, "server"); err == nil {
 		t.Fatal("accepted ambiguous physical owner")
 	}
+	if _, err := s.Get(alias, "server"); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatal("get accepted ambiguous physical owner", err)
+	}
+	if _, err := s.List(dir); err == nil {
+		t.Fatal("list accepted ambiguous physical owner")
+	}
 	if !bytes.Equal(data, contents(t, path)) {
 		t.Fatal("ambiguous registry changed")
 	}
 }
 
+func TestReserveRequiresPoolReaderWithoutSaving(t *testing.T) {
+	s, dir := fixture(t, ports.Range{Start: 45000, End: 45000})
+	readPool := s.ReadPool
+	s.ReadPool = nil
+	if port, err := s.Reserve(context.Background(), dir, "api"); port != 0 || err == nil {
+		t.Fatal("reservation accepted missing pool reader", port, err)
+	}
+	if _, err := os.Stat(filepath.Join(s.Coordinator.Dir, File)); !os.IsNotExist(err) {
+		t.Fatal("missing pool reader wrote registry", err)
+	}
+	s.ReadPool = readPool
+	if port := reserve(t, s, dir, "api"); port != 45000 {
+		t.Fatal(port)
+	}
+}
+
 func TestMissingConfigAllocatesLowestDefaultAndSkipsBookedBusy(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
-	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	cfg := config.Store{Coordinator: state.Coordinator{Dir: root}}
+	s := Store{Coordinator: cfg.Coordinator, ReadPool: cfg.Read}
 	owner := t.TempDir()
 	var probed []int
 	s.Probe = func(_ context.Context, p int) (bool, error) { probed = append(probed, p); return p != 49152, nil }
@@ -534,7 +557,8 @@ func TestMissingConfigAllocatesLowestDefaultAndSkipsBookedBusy(t *testing.T) {
 
 func TestMissingConfigDefaultIncludesLastTCPPort(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
-	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	cfg := config.Store{Coordinator: state.Coordinator{Dir: root}}
+	s := Store{Coordinator: cfg.Coordinator, ReadPool: cfg.Read}
 	probes := 0
 	s.Probe = func(_ context.Context, p int) (bool, error) {
 		if p < 49152 || p > 65535 {

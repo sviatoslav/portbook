@@ -104,8 +104,7 @@ func configLocationForTest() (string, error) {
 }
 
 func TestDiagnosticConfigDirEndBoundary(t *testing.T) {
-	var helpErr error
-	root := newCommandTree(&options{}, &bytes.Buffer{}, &helpErr)
+	root := newCommandTree(&options{}, &bytes.Buffer{})
 	for _, args := range [][]string{
 		{"--config-dir", "--", "--output=table"},
 		{"--config-dir", "--", "--output", "table"},

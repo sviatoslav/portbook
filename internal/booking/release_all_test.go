@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
-	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 )
 
 func TestReleaseAllExactOwnerNoProbesAndSortedPorts(t *testing.T) {
@@ -27,9 +27,9 @@ func TestReleaseAllExactOwnerNoProbesAndSortedPorts(t *testing.T) {
 		t.Fatal("release probed")
 		return false, errors.New("unknown")
 	}
-	s.Config.Location = &config.Location{EnvSet: true, Env: "relative"}
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "location.json"), []byte("broken"), 0600)
+	s.ReadPool = func() (ports.Pool, error) { t.Fatal("release read the pool"); return ports.Pool{}, nil }
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "config.json"), []byte("broken"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "location.json"), []byte("broken"), 0600)
 	alias := filepath.Join(t.TempDir(), "alias")
 	if err := os.Symlink(owner, alias); err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestReleaseAllFailsClosedAndUnlocks(t *testing.T) {
 	owner, _ = Directory(owner)
 	path := seedRelease(t, s, Registry{owner: {"default": 45000, "api": 45001}})
 	before := contents(t, path)
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestReleaseAllFailsClosedAndUnlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if os.Geteuid() != 0 {
-		root := s.Config.Coordinator.Dir
+		root := s.Coordinator.Dir
 		if err := os.Chmod(root, 0500); err != nil {
 			t.Fatal(err)
 		}

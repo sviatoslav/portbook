@@ -60,6 +60,10 @@ func diagnosticOutput(args []string, fallback string, cmd *cobra.Command) string
 // command search. Known flag values are consumed, including output-shaped paths.
 // Cobra still owns operand/flag validation and command dispatch.
 func outputScopeStart(args []string, root *cobra.Command) (start int, misplaced bool) {
+	// Find does not parse flags or execute handlers. Use its resolved command's
+	// metadata even before the command path: Cobra accepts leaf flags there,
+	// and their values must not hide a later, misplaced --output.
+	resolved, _, _ := root.Find(args)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -70,7 +74,7 @@ func outputScopeStart(args []string, root *cobra.Command) (start int, misplaced 
 			if name == "output" {
 				misplaced = true
 			}
-			flag := root.Flag(name)
+			flag := resolved.Flag(name)
 			if !assigned && ((flag != nil && flag.NoOptDefVal == "") || name == "output") {
 				i++
 			}

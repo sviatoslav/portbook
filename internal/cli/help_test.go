@@ -90,3 +90,54 @@ func TestEndOfFlags(t *testing.T) {
 		t.Fatalf("literal flag treated as option: %d %s %s", code, &out, &diag)
 	}
 }
+
+func TestCommandHelpConfigurationPolicies(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PORTBOOK_CONFIG_DIR", "")
+	root, err := configLocationForTest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	pointer := filepath.Join(root, "location.json")
+	if err := os.WriteFile(pointer, []byte("broken pointer"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalidEnvironment := range []bool{false, true} {
+		if invalidEnvironment {
+			t.Setenv("PORTBOOK_CONFIG_DIR", "relative")
+		} else if err := os.Unsetenv("PORTBOOK_CONFIG_DIR"); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range []struct {
+			command string
+			want    int
+		}{
+			{"get", 0}, {"list", 0}, {"release", 0}, {"cleanup", 0}, {"install-skills", 0},
+			{"", 1}, {"reserve", 1}, {"config", 1}, {"config show", 1},
+			{"config add", 1}, {"config remove", 1}, {"config reset", 1},
+			{"config path", 1}, {"config path get", 1},
+			{"config path set", 0}, {"config path reset", 0},
+		} {
+			want := tc.want
+			if invalidEnvironment && (tc.command == "config path set" || tc.command == "config path reset") {
+				want = 1
+			}
+			args := append(strings.Fields(tc.command), "--help")
+			var out, diag bytes.Buffer
+			if code := Run(context.Background(), args, &out, &diag, false); code != want || (code == 0 && diag.Len() != 0) || (code != 0 && out.Len() != 0) {
+				t.Fatalf("%v invalidEnvironment=%v: %d want %d; %s %s", args, invalidEnvironment, code, want, &out, &diag)
+			}
+		}
+	}
+	data, err := os.ReadFile(pointer)
+	if err != nil || string(data) != "broken pointer" {
+		t.Fatal("help changed pointer evidence", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "state.lock")); !os.IsNotExist(err) {
+		t.Fatal("help created a lock", err)
+	}
+}

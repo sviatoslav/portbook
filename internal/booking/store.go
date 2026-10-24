@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
@@ -18,13 +18,19 @@ var ErrNotFound = errors.New("reservation not found")
 var ErrExhausted = errors.New("no available ports in the configured pool")
 
 type Store struct {
-	Config config.Store
+	Coordinator state.Coordinator
+	// ReadPool is required only for new reservations. It resolves and reads the
+	// selected pool inside Coordinator's lock; it must not acquire another lock.
+	ReadPool func() (ports.Pool, error)
 	// Optional dependency for deterministic selection/failure tests.
 	Probe func(context.Context, int) (bool, error)
 }
 
 func (s Store) read() (Registry, error) {
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	if s.Coordinator.Dir == "" || !filepath.IsAbs(s.Coordinator.Dir) {
+		return nil, errors.New("state directory must be an absolute path")
+	}
+	path := filepath.Join(s.Coordinator.Dir, File)
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return Registry{}, nil
@@ -42,8 +48,8 @@ func (s Store) read() (Registry, error) {
 	return decode(data)
 }
 
-// Reserve acquires exactly the global config coordinator lock, and resolves the
-// selected config inside it. Config.Read does not acquire a lock or write files.
+// Reserve holds the global coordinator lock across registry reads, duplicate
+// detection, pool selection, probes, and saving. Only new bookings read the pool.
 func (s Store) Reserve(ctx context.Context, directory, service string) (int, error) {
 	if err := ValidateService(service); err != nil {
 		return 0, err
@@ -53,7 +59,7 @@ func (s Store) Reserve(ctx context.Context, directory, service string) (int, err
 		return 0, err
 	}
 	port := 0
-	err = s.Config.Coordinator.WithLock(ctx, func() error {
+	err = s.Coordinator.WithLock(ctx, func() error {
 		// Recheck after waiting for the lock: invalid owners must never be booked.
 		current, err := Directory(directory)
 		if err != nil {
@@ -76,7 +82,10 @@ func (s Store) Reserve(ctx context.Context, directory, service string) (int, err
 		if r[key][service] != 0 {
 			return fmt.Errorf("%w for service %q in %q", ErrAlreadyExists, service, key)
 		}
-		pool, err := s.Config.Read()
+		if s.ReadPool == nil {
+			return errors.New("reservation requires a pool reader")
+		}
+		pool, err := s.ReadPool()
 		if err != nil {
 			return err
 		}
@@ -115,7 +124,7 @@ func (s Store) Reserve(ctx context.Context, directory, service string) (int, err
 			if err != nil {
 				return err
 			}
-			if err := state.AtomicWrite(s.Config.Coordinator.Dir, File, data); err != nil {
+			if err := state.AtomicWrite(s.Coordinator.Dir, File, data); err != nil {
 				return err
 			}
 			port = p
@@ -127,6 +136,21 @@ func (s Store) Reserve(ctx context.Context, directory, service string) (int, err
 		return 0, err
 	}
 	return port, nil
+}
+
+// readOwner validates one owner and resolves it against one registry snapshot.
+// It never reads the pool, takes a lock, probes ports, or writes state.
+func (s Store) readOwner(directory string) (Registry, string, error) {
+	dir, err := Directory(directory)
+	if err != nil {
+		return nil, "", err
+	}
+	r, err := s.read()
+	if err != nil {
+		return nil, "", err
+	}
+	key, err := ownerKey(r, dir)
+	return r, key, err
 }
 
 // ownerKey preserves the first stored spelling for aliases of one directory.

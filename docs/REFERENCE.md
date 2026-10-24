@@ -286,7 +286,9 @@ its errors and help also use those defaults.
 Config add, remove (including `--all`), and reset always print plain count
 confirmations on terminals and pipes. Config path set/reset always print plain
 saved directory, effective directory, config file, and source lines, including
-active overrides. These commands reject `--output` before mutation.
+active overrides. Paths containing nonprinting characters, quotes, backslashes,
+or leading/trailing spaces are quoted and escaped, as in booking tables; JSON
+path reports preserve the exact values. These commands reject `--output` before mutation.
 
 Only `list`, `cleanup`, `config show`, and `config path get` support structured
 output: table/text on terminal stdout, JSON when piped or redirected. A local

@@ -28,8 +28,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer, termina
 		output = "table"
 	}
 	options := &options{output: output, defaultOutput: output, installer: installer}
-	var helpErr error
-	root := newCommandTree(options, out, &helpErr)
+	root := newCommandTree(options, out)
 	// Cobra Find permits leaf flags before the command name. Output is scoped
 	// to structured commands, so reject that placement before execution.
 	if _, misplaced := outputScopeStart(args, root); misplaced {
@@ -38,7 +37,7 @@ func run(ctx context.Context, args []string, out, diagnostics io.Writer, termina
 	root.SetArgs(append([]string{}, args...))
 	cmd, err := root.ExecuteContextC(ctx)
 	if err == nil {
-		err = helpErr
+		err = options.helpErr
 	}
 	if err == nil {
 		return 0

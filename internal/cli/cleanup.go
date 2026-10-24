@@ -9,13 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/sviatoslav/portbook/internal/booking"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func cleanupCommand(o *options, out io.Writer) *cobra.Command {
 	var dryRun bool
-	cmd := &cobra.Command{Use: "cleanup", Short: "Remove bookings only for deleted owners with unused TCP ports", Long: "Check only recorded owners. Retain existing, inaccessible, or uncertain owners and busy or uncertain ports. --dry-run previews this snapshot without writing files or locks.", Example: "  portbook cleanup --dry-run\n  portbook cleanup --output table", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := o.command(&cobra.Command{Use: "cleanup", Short: "Remove bookings only for deleted owners with unused TCP ports", Long: "Check only recorded owners. Retain existing, inaccessible, or uncertain owners and busy or uncertain ports. --dry-run previews this snapshot without writing files or locks.", Example: "  portbook cleanup --dry-run\n  portbook cleanup --output table", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if err := o.validate(); err != nil {
 			return err
 		}
@@ -23,11 +22,10 @@ func cleanupCommand(o *options, out io.Writer) *cobra.Command {
 		if err != nil {
 			return &commandError{code: "storage_error", err: err}
 		}
-		return executeCleanup(cmd.Context(), booking.Store{Config: config.Store{Coordinator: c}}, dryRun, out, o.format())
-	}}
+		return executeCleanup(cmd.Context(), booking.Store{Coordinator: c}, dryRun, out, o.format())
+	}}, commandPolicy{help: helpIndependent, structuredOutput: true})
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview proposed removals without writing state")
 	once(cmd.Flags().Lookup("dry-run"))
-	cmd.InitDefaultHelpFlag()
 	return cmd
 }
 

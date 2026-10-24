@@ -9,14 +9,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/sviatoslav/portbook/internal/booking"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func releaseCommand(o *options, out io.Writer) *cobra.Command {
 	var directory, owner, service string
 	var all bool
-	cmd := &cobra.Command{
+	cmd := o.command(&cobra.Command{
 		Use: "release SERVICE | --all", Short: "Delete one booking or all bookings for an owner directory",
 		Long:    "Delete registry records without probing TCP ports or stopping listeners. Supply one service or --all for every service of this exact owner, excluding child directories. A missing booking fails without rewriting the registry. Success always prints a plain confirmation; --output is not accepted. The owner defaults to cwd, without Git root discovery. Configuration and saved path choices are not read.",
 		Example: "  portbook release server --directory /projects/my-app\n  portbook release api\n  portbook release --all",
@@ -39,7 +38,7 @@ func releaseCommand(o *options, out io.Writer) *cobra.Command {
 			if err != nil {
 				return &commandError{code: "storage_error", err: err}
 			}
-			store := booking.Store{Config: config.Store{Coordinator: coordinator}}
+			store := booking.Store{Coordinator: coordinator}
 			var render func() error
 			if all {
 				var res booking.ReleaseAllResult
@@ -63,12 +62,11 @@ func releaseCommand(o *options, out io.Writer) *cobra.Command {
 
 			return nil
 		},
-	}
+	}, commandPolicy{help: helpIndependent})
 	cmd.Flags().BoolVar(&all, "all", false, "Delete all services of this exact owner; cannot be mixed with a service")
 	once(cmd.Flags().Lookup("all"))
 	cmd.Flags().StringVar(&directory, "directory", "", "Existing absolute owner directory (default: current working directory)")
 	once(cmd.Flags().Lookup("directory"))
-	cmd.InitDefaultHelpFlag()
 	return cmd
 }
 

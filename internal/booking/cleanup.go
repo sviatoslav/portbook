@@ -32,7 +32,7 @@ type CleanupReport struct {
 // Cleanup never reads the selected pool or pointer. Dry runs use atomic snapshot
 // reads without creating a lock or directory. Mutations reread under one lock.
 func (s Store) Cleanup(ctx context.Context, dryRun bool) (CleanupReport, error) {
-	if s.Config.Coordinator.Dir == "" || !filepath.IsAbs(s.Config.Coordinator.Dir) {
+	if s.Coordinator.Dir == "" || !filepath.IsAbs(s.Coordinator.Dir) {
 		return CleanupReport{}, errors.New("state directory must be an absolute path")
 	}
 	report := CleanupReport{Command: "cleanup", DryRun: dryRun, Rows: []CleanupRow{}}
@@ -135,13 +135,13 @@ func (s Store) Cleanup(ctx context.Context, dryRun bool) (CleanupReport, error) 
 		if err != nil {
 			return err
 		}
-		return state.AtomicWrite(s.Config.Coordinator.Dir, File, data)
+		return state.AtomicWrite(s.Coordinator.Dir, File, data)
 	}
 	var err error
 	if dryRun {
 		err = operation()
 	} else {
-		err = s.Config.Coordinator.WithLock(ctx, operation)
+		err = s.Coordinator.WithLock(ctx, operation)
 	}
 	if err != nil {
 		return CleanupReport{}, err

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/sviatoslav/portbook/internal/booking"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
@@ -127,7 +126,7 @@ func TestCleanupSuccessfulMutationSurvivesOutputFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	probes := 0
-	store := booking.Store{Config: config.Store{Coordinator: c}, Probe: func(context.Context, int) (bool, error) { probes++; return true, nil }}
+	store := booking.Store{Coordinator: c, Probe: func(context.Context, int) (bool, error) { probes++; return true, nil }}
 	err = executeCleanup(context.Background(), store, false, failedWriter{}, "json")
 	var classified *commandError
 	if !errors.As(err, &classified) || classified.code != "runtime_error" || probes != 1 {

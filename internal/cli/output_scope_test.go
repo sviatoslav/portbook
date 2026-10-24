@@ -25,6 +25,47 @@ func TestStructuredOutputScopes(t *testing.T) {
 	}
 }
 
+func TestOutputScopeWithPrefixLeafValues(t *testing.T) {
+	base, owner := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", filepath.Join(base, "home"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "xdg"))
+	t.Setenv("PORTBOOK_CONFIG_DIR", filepath.Join(base, "pool"))
+	for _, terminal := range []bool{false, true} {
+		format := "table"
+		if terminal {
+			format = "json"
+		}
+		for _, prefix := range [][]string{{"--directory", owner}, {"--directory=" + owner}} {
+			for _, output := range [][]string{{"--output", format}, {"--output=" + format}} {
+				for _, help := range []bool{false, true} {
+					args := append(append([]string{}, prefix...), output...)
+					args = append(args, "list")
+					if help {
+						args = append(args, "--help")
+					}
+					var out, diag bytes.Buffer
+					if code := Run(context.Background(), args, &out, &diag, terminal); code != 2 || out.Len() != 0 || strings.HasPrefix(diag.String(), "{") == terminal {
+						t.Fatalf("%v terminal=%v: %d %s %s", args, terminal, code, &out, &diag)
+					}
+				}
+			}
+		}
+		// Correctly scoped output still controls diagnostics after a prefix leaf
+		// flag, including when that flag's value resembles a command or output.
+		for _, value := range []string{owner, "list", "--output=" + format} {
+			args := []string{"--directory", value, "list", "--bogus", "--output", format}
+			var out, diag bytes.Buffer
+			if code := Run(context.Background(), args, &out, &diag, terminal); code != 2 || out.Len() != 0 || strings.HasPrefix(diag.String(), "{") != terminal {
+				t.Fatalf("%v terminal=%v: %d %s %s", args, terminal, code, &out, &diag)
+			}
+		}
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil || len(entries) != 0 {
+		t.Fatal("invalid flag placement wrote state", entries, err)
+	}
+}
+
 func TestUnsupportedOutputNeverRunsOrCreatesState(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("HOME", filepath.Join(base, "home"))

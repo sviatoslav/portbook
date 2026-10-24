@@ -3,10 +3,11 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/sviatoslav/portbook/internal/config"
-	"github.com/sviatoslav/portbook/internal/ports"
 	"io"
 	"text/tabwriter"
+
+	"github.com/sviatoslav/portbook/internal/config"
+	"github.com/sviatoslav/portbook/internal/ports"
 )
 
 type pathResult struct {
@@ -57,13 +58,13 @@ func render(w io.Writer, format string, res result) error {
 		if res.Path.Changed {
 			saved := "(none; OS default)"
 			if res.Path.SavedDirectory != nil {
-				saved = *res.Path.SavedDirectory
+				saved = humanIdentity(*res.Path.SavedDirectory)
 			}
 			if _, err := fmt.Fprintf(w, "Saved directory: %s\n", saved); err != nil {
 				return err
 			}
 		}
-		_, err := fmt.Fprintf(w, "Effective directory: %s\nConfig file: %s\nSource: %s\n", res.Path.Directory, res.Path.ConfigFile, res.Path.Source)
+		_, err := fmt.Fprintf(w, "Effective directory: %s\nConfig file: %s\nSource: %s\n", humanIdentity(res.Path.Directory), humanIdentity(res.Path.ConfigFile), res.Path.Source)
 		return err
 	}
 	if res.Changed != nil {

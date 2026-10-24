@@ -23,7 +23,7 @@ func seedRelease(t *testing.T, s Store, r Registry) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,9 @@ func TestReleasePreservesOtherBookingsAndIgnoresConfig(t *testing.T) {
 	other, _ := Directory(t.TempDir())
 	path := seedRelease(t, s, Registry{dir: {"default": 45000, "server": 45001}, other: {"default": 45002}})
 	// Neither corrupt config nor the corrupt saved pointer is needed for release.
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "config.json"), []byte("bad"), 0600)
-	os.WriteFile(filepath.Join(s.Config.Coordinator.Dir, "location.json"), []byte("bad"), 0600)
-	s.Config.Location = &config.Location{EnvSet: true, Env: "relative"}
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "config.json"), []byte("bad"), 0600)
+	os.WriteFile(filepath.Join(s.Coordinator.Dir, "location.json"), []byte("bad"), 0600)
+	s.ReadPool = func() (ports.Pool, error) { t.Fatal("release read the pool"); return ports.Pool{}, nil }
 	alias := filepath.Join(t.TempDir(), "alias")
 	if err := os.Symlink(dir, alias); err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestReleaseNoopAndFailuresPreserveRegistry(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) || res.Released || res.Port != nil {
 		t.Fatal(res, err)
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("created missing registry", err)
 	}
@@ -97,7 +97,7 @@ func TestReleaseNoopAndFailuresPreserveRegistry(t *testing.T) {
 		t.Fatal("cancel changed registry")
 	}
 
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestReleaseSerializesReserveAndConfig(t *testing.T) {
 	s, dir := fixture(t, ports.Range{Start: 45000, End: 45000})
 	dir, _ = Directory(dir)
 	path := seedRelease(t, s, Registry{dir: {"default": 45000}})
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestReleaseSerializesReserveAndConfig(t *testing.T) {
 	done := make(chan error, 1)
 	// Give this release a longer wait than the competitors' deliberate timeouts.
 	waiting := s
-	waiting.Config.Coordinator.LockTimeout = time.Second
+	waiting.Coordinator.LockTimeout = time.Second
 	go func() { _, err := waiting.Release(context.Background(), dir, "default"); done <- err }()
 	select {
 	case err := <-done:
@@ -188,7 +188,7 @@ func TestReleaseSerializesReserveAndConfig(t *testing.T) {
 	if _, err := competitor.Reserve(context.Background(), dir, "other"); err == nil {
 		t.Error("reserve bypassed shared lock")
 	}
-	if _, _, err := s.Config.Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config bypassed shared lock"); return 0, nil }); err == nil {
+	if _, _, err := (config.Store{Coordinator: s.Coordinator}).Mutate(context.Background(), func(*ports.Pool) (int, error) { t.Error("config bypassed shared lock"); return 0, nil }); err == nil {
 		t.Error("config did not wait")
 	}
 	lock.Unlock()
@@ -220,7 +220,7 @@ func TestReleaseOwnerValidation(t *testing.T) {
 
 func TestReleaseRegistryAccessAndCaseAliases(t *testing.T) {
 	s, dir := fixture(t)
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	target := filepath.Join(t.TempDir(), "target")
 	if err := os.WriteFile(target, []byte("evidence"), 0600); err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestReleaseCancellationPreservesSnapshotAndUnlocks(t *testing.T) {
 	emptyOwner := filepath.Join(t.TempDir(), "missing-empty-owner")
 	path := seedRelease(t, s, Registry{dir: {"default": 45000}, emptyOwner: {}})
 	before := contents(t, path)
-	lock := flock.New(filepath.Join(s.Config.Coordinator.Dir, "state.lock"))
+	lock := flock.New(filepath.Join(s.Coordinator.Dir, "state.lock"))
 	if err := lock.Lock(); err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +344,7 @@ func TestReleaseUnwritableStatePreservesRegistryAndUnlocks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := s.Config.Coordinator.Dir
+	root := s.Coordinator.Dir
 	defer os.Chmod(root, 0700)
 	if err := os.Chmod(root, 0500); err != nil {
 		t.Fatal(err)

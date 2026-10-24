@@ -8,13 +8,12 @@ import (
 	"testing"
 
 	"github.com/gofrs/flock"
-	"github.com/sviatoslav/portbook/internal/config"
 	"github.com/sviatoslav/portbook/internal/state"
 )
 
 func TestListSnapshotIdentityAndNoWrites(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "absent")
-	s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+	s := Store{Coordinator: state.Coordinator{Dir: root}}
 	entries, err := s.List("")
 	if err != nil || entries == nil || len(entries) != 0 {
 		t.Fatal(entries, err)
@@ -84,7 +83,7 @@ func TestListFailsClosed(t *testing.T) {
 		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
-		s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+		s := Store{Coordinator: state.Coordinator{Dir: root}}
 		for i := 0; i < 2; i++ {
 			if _, err := s.List(""); err == nil {
 				t.Fatal("accepted", data)
@@ -122,7 +121,7 @@ func TestListFailsClosed(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+			s := Store{Coordinator: state.Coordinator{Dir: root}}
 			if _, err := s.List(""); err == nil {
 				t.Fatal("accepted", kind)
 			}
@@ -144,7 +143,7 @@ func TestListCaseIdentityAndChangedSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(s.Config.Coordinator.Dir, File)
+	path := filepath.Join(s.Coordinator.Dir, File)
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +176,7 @@ func TestListCaseIdentityAndChangedSymlink(t *testing.T) {
 
 func TestListRejectsInvalidStateRoot(t *testing.T) {
 	for _, root := range []string{"", "relative"} {
-		s := Store{Config: config.Store{Coordinator: state.Coordinator{Dir: root}}}
+		s := Store{Coordinator: state.Coordinator{Dir: root}}
 		if _, err := s.List(""); err == nil {
 			t.Fatalf("accepted invalid state root %q", root)
 		}
