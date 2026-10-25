@@ -40,7 +40,7 @@ git push origin vX.Y.Z
 CI runs source tests, race detection, vet, and build checks, then packages once
 and smoke-tests the extracted artifacts natively on all four targets. The final
 tag-only job publishes those exact archives and checksums. Write permission is
-confined to that publication job. Pull requests and master pushes produce
+confined to that publication job. Pull requests and main pushes produce
 snapshot artifacts with read-only repository permissions.
 
 Review the completed workflow and published assets. Preserve published tags and

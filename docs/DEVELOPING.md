@@ -55,7 +55,7 @@ default location; a missing registry supplies an empty map. Existing documents
 are authoritative. Decoders validate versions, fields, duplicate members, values,
 and identities while preserving invalid evidence for investigation.
 
-See [AGENTS.md](https://github.com/sviatoslav/portbook/blob/master/AGENTS.md)
+See [AGENTS.md](https://github.com/sviatoslav/portbook/blob/main/AGENTS.md)
 for the behavioral invariants governing changes.
 
 ## Checks
