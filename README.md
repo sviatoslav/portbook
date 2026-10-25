@@ -1,146 +1,54 @@
 # Portbook
 
-Portbook coordinates local TCP port reservations across directories, projects,
-worktrees, and coding agents. Give each service a name and keep its port booked
-until you release it, so cooperating projects avoid each other's ports.
+Give each local service a stable TCP port. Portbook keeps reservations by
+project directory and service name, so projects, worktrees, and coding agents
+can share one machine.
 
-## Installation
+## Install
 
 ```sh
 brew install sviatoslav/tap/portbook
 ```
 
-No Go installation is required. Homebrew and [release downloads](https://github.com/sviatoslav/portbook/releases)
-support macOS and Linux on Intel/AMD x86-64 and ARM64.
-See [installation, source builds, updates, and uninstalling](docs/INSTALLING.md).
+Available for macOS and Linux on x86-64 and ARM64.
+See [installation](docs/INSTALLING.md) for binaries, source builds, and updates.
 
-The named-service workflow requires **Portbook v0.3.0 or newer**. This checkout also
-includes the unreleased output changes described below. Check `portbook --version`
-and see the [release notes and migration](docs/RELEASING.md#v030-release-notes-and-migration)
-when upgrading from earlier versions. Select an available version from
-[GitHub Releases](https://github.com/sviatoslav/portbook/releases).
+## Usage
 
-## Commands
-
-Run commands as `portbook COMMAND`. Brackets mark optional inputs.
-
-### Everyday commands
-
-| Command | Arguments/options | Description |
-| --- | --- | --- |
-| `reserve` | `SERVICE` | Create a reservation; fail if it already exists. |
-| `get` | `SERVICE` | Print an existing reservation's port; fail if missing. |
-| `release` | `SERVICE` or `--all` | Remove one booking or all bookings for this directory; fail if none match. |
-| `list` | `[--directory ABSOLUTE_DIRECTORY \| --all]` | Show bookings for this directory or all directories. |
-| `cleanup` | `[--dry-run]` | Remove safe-to-clean bookings for confirmed missing directories. |
-| `install-skills` | `[--agent codex\|claude-code]` | Install the published Portbook skill globally; requires Node.js/npx. |
-
-`get`, `reserve`, and `release` also accept `--directory ABSOLUTE_DIRECTORY`.
-Omit `--directory` to use the current directory. A service name is required,
-even for a project with one port; use a name such as `app` or follow your project’s conventions.
-`release --all` removes every service booking for only the selected directory.
-`list` also defaults to the current directory.
-
-### Configuration
-
-The default pool is **49152–65535** (16,384 ports). No setup is needed.
-
-| Command | Arguments/options | Description |
-| --- | --- | --- |
-| `config show` | — | Show the allowed pool and port count. |
-| `config add` | `PORT\|START-END [PORT\|START-END ...]` | Add ports to the pool. |
-| `config remove` | `PORT\|START-END [PORT\|START-END ...]` or `--all` | Remove ports or clear the pool. |
-| `config reset` | — | Restore the default pool. |
-| `config path get` | — | Show the effective configuration location. |
-| `config path set` | `ABSOLUTE_DIRECTORY` | Save a configuration location without moving files. |
-| `config path reset` | — | Remove the saved location choice. |
-
-Ranges are inclusive. Additions form a union; removals subtract ports.
-Pool changes preserve existing bookings. See the [configuration guide](docs/REFERENCE.md#configuring-the-port-pool)
-for custom pools and location selection.
-
-Version 0.3.0 adds `config reset`, scopes `--output` to structured commands, and
-always prints plain release confirmations. See the migration notes when upgrading
-from v0.2.0.
-
-### Flags and help
-
-| Flag | Arguments/options | Description |
-| --- | --- | --- |
-| `--output` | `table` or `json` | Choose the format on `list`, `cleanup`, `config show`, or `config path get`. |
-| `--config-dir` | `ABSOLUTE_DIRECTORY` | Override pool configuration for this invocation. |
-| `--help`, `-h` | On any command | Show help for that command. |
-| `--version` | On `portbook` only | Print the version and commit. |
-
-This checkout's **unreleased** output change makes config mutations always print
-plain confirmations, on terminals and pipes. `--output` is accepted only after
-one of the four exact commands above, for example `portbook config show --output json`.
-It is unavailable on command groups and all other commands. Structured results
-default to tables on a terminal and JSON when piped. Published v0.3.0 still supports
-output flags throughout the config subtree and JSON config mutation receipts.
-`install-skills` passes through third-party prompts and output unchanged.
-Configuration overrides never move the shared booking registry.
-
-## Usage examples
-
-Create a booking, read it from another shell or agent in the same directory, then
-release its booking when you no longer need it. These examples run from
-`/projects/my-app`; ports are illustrative:
-
-```console
-$ portbook reserve app
-49152
-$ portbook get app
-49152
-$ portbook release app
-Released port 49152 for "app" in "/projects/my-app".
-```
-
-Keep separate services in the same project:
-
-```console
-$ portbook reserve api
-49152
-$ portbook reserve web
-49153
-$ portbook list --output table
-SERVICE  PORT
-api      49152
-web      49153
-```
-
-Use an existing reservation in a script, or inspect bookings across projects:
+From your project directory, reserve a port, read it on later starts, and release
+the booking when you're finished:
 
 ```sh
-PORT=$(portbook get api)
-portbook get web --directory /absolute/path/to/project
-portbook list --all --output json
-portbook cleanup --dry-run
+portbook reserve api
+portbook get api
+portbook release api
 ```
 
-Before deleting a worktree, remove its bookings while the directory still exists:
+Both `reserve` and `get` print the port number to use in your application's startup
+command. Keep the booking between restarts; stop the service through its usual
+shutdown command before releasing the booking.
 
-```sh
-portbook release --all --directory /absolute/path/to/worktree
-```
+Each directory has its own bookings. By default, Portbook chooses the lowest
+available port in **49152–65535**. Start your service promptly after reserving:
+other programs can still bind the port.
 
-## Practical rules
+## Everyday commands
 
-- Run from the intended directory, or pass an absolute path to an existing
-  directory. Each nested directory is a separate owner; Portbook does not find Git roots.
-- Release removes bookings even if a port is busy; it never stops a listener.
-  Stop services separately when finished. Bookings do not expire.
-- New reservations choose the lowest allowed port that is unbooked and bindable.
-  Portbook does not keep a socket open; start your service promptly.
-- Preview cleanup first. Existing directories keep their bookings even when idle;
-  cleanup only removes confirmed missing owners with available ports.
+Run each command as `portbook COMMAND`. Brackets mark optional inputs.
 
-## Further reading
+| Command | What it does |
+| --- | --- |
+| `reserve SERVICE` | Reserve a port for a named service. |
+| `get SERVICE` | Print the service's saved port. |
+| `release SERVICE` or `release --all` | Release one or every booking for this directory. |
+| `list [--all]` | Show this directory's bookings, or bookings across all directories. |
+| `cleanup [--dry-run]` | Clean up bookings for missing directories, or preview the cleanup. |
+| `install-skills [--agent codex\|claude-code]` | Install the Portbook agent skill; defaults to Codex. |
 
-- [Agent setup](docs/AGENT-SETUP.md): install the skill and document service names and permissions.
-- [Installation](docs/INSTALLING.md): binaries, checksums, source builds, updates, uninstalling.
-- [Reference and troubleshooting](docs/REFERENCE.md): command behavior, cleanup rules,
-  JSON/errors, configuration locations, storage, and concurrency.
-- [Development](docs/DEVELOPING.md) and [releasing](docs/RELEASING.md).
+## More
 
-Portbook is available under the [MIT License](LICENSE).
+- [Command reference](docs/REFERENCE.md): configuration, flags, output formats, and troubleshooting.
+- [Agent setup](docs/AGENT-SETUP.md): install the skill and define project conventions.
+- [Development](docs/DEVELOPING.md) and [releasing](docs/RELEASING.md): contributor guides.
+
+[MIT License](LICENSE).

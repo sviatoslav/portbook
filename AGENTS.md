@@ -1,108 +1,73 @@
 # Portbook development
 
-- Current scope is configuration, single-service `get`/`reserve`, owner-scoped `release`,
-  read-only `list`, and explicit `cleanup`. Add batch reservations or other
-  features only when explicitly requested.
-- Release success is always a plain confirmation on terminals and pipes, with no
-  JSON receipt or output override. Errors/help retain terminal-dependent defaults.
-  Release deletes registry records without TCP probes or listener checks. A single
-  service or `--all` removes only the exact canonical owner's bookings, preserving
-  other owners and descendants. Missing bookings fail without creating or rewriting
-  the registry. Use the fixed coordinator without reading config or saved pointer.
-- List reads only the fixed registry snapshot, without config/pointer reads, locks,
-  writes, or probes. Scoped listing uses reserve owner identity; `--all` retains
-  disappeared owner paths. Sort by directory then service; keep empty JSON arrays.
-- Reserve prints only the decimal port and newline on terminals and pipes, with
-  no output override.
-  Owners are canonical existing directories, defaulting to cwd without Git-root
-  discovery. Get reads existing bookings even outside the pool or with a listener present,
-  using only a registry snapshot without locks, config/pointer reads, writes, or
-  probes. Duplicate reserve fails under the mutation lock without rewriting data.
-  Get/reserve and single release require one explicit service; release --all
-  accepts no service. No implicit default. The literal service `default` stays
-  valid for existing bookings, without migration.
-  New bookings require the lowest globally unbooked and OS-bindable TCP port.
-- Preserve the command paths, port-set semantics, table/JSON output, error schema,
-  and exit codes documented in docs/REFERENCE.md. Define commands and flags in Cobra;
-  use explicit handlers rather than dispatching mutations by command strings.
-- `--output` is local only to the exact leaves list, cleanup, config show, and
-  config path get. Config add/remove/reset and path set/reset always print plain
-  human confirmations on terminals and pipes. Groups and all other commands
-  reject --output. Flags before the complete supported command path must fail
-  even though Cobra can otherwise accept leaf flags before commands.
-- Help is scoped. Resolve paths and validate applicable flags and supplied
-  operands before rendering help; missing required operands may be omitted for
-  help. Keep Cobra's automatic diagnostics disabled to preserve output contracts.
-- All state mutations must use `internal/state.Coordinator.WithLock` and the same
-  `state.lock`. Acquire once around reads, decisions, and saves. Do not nest this
-  lock or call config mutations from another lock callback. Return callback errors
-  before saving. The coordinator does not roll back arbitrary callback writes.
-- Keep coordination anchored to the OS-standard Portbook directory. Config
-  selection (`--config-dir`, environment, saved `location.json`, default) must
-  never move `state.lock` or registry data. Resolve the saved selection
-  inside config and reservation mutation locks. Path set/reset use that same
-  lock and fixed pointer;
-  they select locations without migrating or deleting configuration. Directory
-  paths must round-trip through JSON; bootstrap filenames and their children
-  are reserved configuration targets. Ordinary
-  pointer reads fail closed; only explicit set/reset may repair pointer evidence.
-- Keep config separate from registry data. Removing allowed ports must
-  never delete or rewrite bookings. No heartbeat, expiry, daemon, proxy, or DB.
-- Configuration and booking reads fail closed. Preserve malformed, duplicate-member,
-  unsupported-version, and inaccessible files; do not reset or quarantine them.
-  Preserve atomic replacement, temp-file sync, directory sync, and bounded waits.
-- Tests must isolate all state with temporary absolute directories. Keep real
-  independent-process concurrency coverage. Run targeted regressions after fixes,
+Use [DEVELOPING.md](docs/DEVELOPING.md) for package structure and checks,
+[REFERENCE.md](docs/REFERENCE.md) for command contracts, and
+[RELEASING.md](docs/RELEASING.md) for packaging and publication.
+
+## Command behavior
+
+- Keep scope to configuration, single-service get/reserve, exact-owner release,
+  listing, explicit cleanup, and skill installation. Feature expansion requires
+  an explicit request.
+- Owners are canonical existing directories, defaulting to cwd. Each subdirectory
+  is a separate owner. Preserve physical symlink/case aliases and case-sensitive
+  service names. Get/reserve and single release require one explicit service;
+  release `--all` selects exactly that owner's bookings.
+- Get and list read one fixed registry snapshot independently of configuration,
+  locks, writes, and probes. Get returns saved ports even when busy or outside
+  the pool. List sorts by directory then service; `--all` includes missing owners.
+- Reserve checks duplicates under the mutation lock, then chooses the lowest
+  globally unbooked, OS-bindable TCP port. Duplicate attempts preserve registry
+  bytes. Release deletes records independently of listener state and configuration;
+  missing bookings fail while preserving the registry and other owners.
+- Get/reserve print a decimal port and newline. Release and config mutations print
+  plain confirmations. Local `--output` belongs to list, cleanup, config show,
+  and config path get, after their complete command paths. Preserve terminal
+  defaults, JSON schemas, empty arrays, escaped human identities, and exit codes.
+- Define commands and flags in Cobra with explicit handlers and per-command
+  policies. Help validates supplied paths, flags, and operands while allowing
+  missing required operands. Keep Portbook's diagnostics authoritative.
+
+## State and cleanup
+
+- Acquire `state.Coordinator.WithLock` exactly once per mutation, covering reads,
+  decisions, and saves. Use read-only dependencies inside callbacks; return errors
+  before saving. Keep the lock and registry at the fixed OS-standard state root.
+- Config selection is flag, environment, saved pointer, then default. Resolve
+  the saved selection inside mutation locks. Path set/reset change only the fixed
+  pointer, preserving configuration files. Reserve the bootstrap filenames
+  `location.json`, `bookings.json`, and `state.lock`, their children, and aliases
+  from use as config directories. Preserve paths through JSON exactly.
+- Missing configuration uses 49152–65535 in memory. Existing pools, including
+  empty ones, are authoritative. First mutations operate on the effective pool.
+  Config reset persists defaults and counts membership changes; path reset clears
+  the saved location. Pool changes preserve bookings.
+- Preserve malformed, duplicate-member, unsupported-version, nonregular,
+  inaccessible, and invalid-Unicode evidence. Explicit path set/reset may repair
+  pointer evidence. Keep atomic replacement, file and directory sync, and bounded
+  lock waits.
+- Cleanup removes only confirmed missing owners with bindable ports. Retain
+  inaccessible paths, changed symlinks, replacement files, missing ancestors,
+  mount roots, and uncertain owners or ports. Compare ancestor identities and
+  revalidate every proposed owner after all probes, before deleting entries.
+- Dry-run cleanup is read-only. Actual cleanup uses one global lock independently
+  of pool selection. Preserve registry bytes on no-op cleanup and retain
+  preexisting empty owner maps.
+
+## Verification and maintenance
+
+- Isolate tests with temporary absolute state and owner directories. Preserve
+  independent-process concurrency and real-socket coverage. Run targeted tests,
   then `go test ./...`, `go test -race ./...`, `go vet ./...`, and a CLI build.
-  Do not claim Linux runtime or CI results unless actually executed.
-
-- Cleanup checks only recorded owners and removes only confirmed missing owners
-  with bindable TCP ports. Retain existing, inaccessible, changed-symlink,
-  replacement-file, missing-ancestor, mount-root, and other uncertain owners;
-  retain busy/unknown ports. Never infer deletion merely from a failed Stat.
-  Dry runs create no directories/files/locks. Actual cleanup reads/checks/saves
-  under one global lock, independent of pool/pointer selection; no-op cleanup
-  must not rewrite registry bytes. Preserve preexisting empty owner maps.
-- Cleanup must retain proposals when ancestor filesystem identities change and
-  revalidate all proposed owners after probing, before deleting snapshot entries.
-
-- Release preparation uses `.goreleaser.yaml` and `scripts/release-snapshot.sh`.
-  Keep macOS/Linux amd64+arm64 packaging, SHA256 checksums, and deterministic
-  version/commit injection. Version output stays plain text and reads no state.
-  Preserve the canonical `github.com/sviatoslav/portbook` module/import path.
-- Test/package CI snapshots on PR/master without publication rights. Tag releases
-  must gate publication on source checks and native extracted-artifact smoke for
-  every target, publishing the exact checked archives without rebuilding them.
-  Keep write permission confined to the final tag-only publication job.
-- Run `goreleaser check`, snapshot packaging, and `scripts/verify-release.py`
-  after release changes. Smoke data must use temporary HOME/XDG/config/owner
-  paths. Distinguish cross-builds, local native execution, and actual CI results.
-  Keep build/dist output ignored. Review installation examples against assets;
-  do not claim unpublished versions exist. Include the existing MIT LICENSE in
-  every archive and preserve its standard text and copyright notice.
-- Follow `docs/RELEASING.md`; tags, pushes, releases, visibility/license changes,
-  and Homebrew work need explicit user authorization. Preparation alone does not
-  authorize publication. Perform a fresh local review after verification and
-  fix actionable findings before handing off release preparation.
-
-- Missing config files use the in-memory default pool 49152-65535 (16,384 ports),
-  with no read-time writes. Existing configs, including explicit empty ranges,
-  remain authoritative. First mutations modify effective defaults before saving;
-  selecting a missing custom config uses defaults too. Corruption/access errors
-  must never trigger a fallback. Keep advanced pool setup out of the quick start.
-
-- Pool commands are `config add`, `config remove`, `config remove --all`, and
-  `config reset`. Reset atomically persists the shared default pool in the selected
-  config; it preserves bookings and location selection and fails closed on invalid
-  evidence. Repeated resets persist defaults with zero changed memberships.
-  Keep pool reset distinct from `config path reset`. These commands run
-  without an intermediate subcommand. Preserve set/range operands and scoped
-  help/flag validation; keep structured command labels aligned with these paths.
-
-- Documentation navigation: README.md is the short user entry point; detailed
-  contracts live in docs/REFERENCE.md, installation in docs/INSTALLING.md, and
-  contributor guidance in docs/DEVELOPING.md. Keep release availability truthful.
-- Agent setup is documented in docs/AGENT-SETUP.md. Canonical skill source is
-  sviatoslav/portbook-skills, not this repository. install-skills delegates only
-  that skill to Vercel Skills CLI; preserve explicit agent targets, bounded
-  process-group cancellation, stdio passthrough, and state independence.
+- For release changes, run `goreleaser check`, snapshot packaging, and the archive
+  verifier. Keep macOS/Linux amd64/arm64 targets, SHA256 checksums, deterministic
+  version/commit injection, and the existing MIT license in every archive.
+- Gate publication on source checks and native smoke for every target. Publish
+  the checked archives, with write permission confined to the final tag-only job.
+  Tags, pushes, releases, Homebrew work, and visibility/license changes require
+  explicit user authorization. Report only verification actually executed.
+- The canonical skill source is `sviatoslav/portbook-skills`. Keep install-skills
+  scoped to that skill, with explicit agent targets, stdio passthrough, bounded
+  process-group cancellation, and independence from Portbook state.
+- Keep README focused on usage, the reference on current contracts, and contributor
+  docs on structure and behavior. Release history belongs with published releases.
