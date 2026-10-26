@@ -29,8 +29,8 @@ command. Keep the booking between restarts; stop the service through its usual
 shutdown command before releasing the booking.
 
 Each directory has its own bookings. By default, Portbook chooses the lowest
-available port in **49152–65535**. Start your service promptly after reserving:
-other programs can still bind the port.
+available port in **49152–65535**. A booking records the assignment without holding
+a listening socket, so other programs can still bind the port.
 
 ## Everyday commands
 

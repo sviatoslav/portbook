@@ -37,8 +37,8 @@ requested booking is missing; bulk release reports the same error for an empty o
 
 Reservations persist between server runs. `get` returns the saved port even
 when it is busy or outside the current pool. New reservations check all bookings
-and briefly test IPv4/IPv6 TCP availability. Other programs can bind the port
-after that check, so start your service promptly.
+and briefly test IPv4/IPv6 TCP availability. Reservations do not hold listening
+sockets; other programs can bind the port after that check.
 
 Release removes booking records; running services continue until you stop them
 through their own shutdown command. Before removing a worktree, run:

@@ -21,45 +21,53 @@ across your projects through the [Vercel Skills CLI](https://github.com/vercel-l
 Follow its terminal prompts. Back up local skill edits before reinstalling,
 since installation can replace them.
 
-The canonical skill lives in
-[sviatoslav/portbook-skills](https://github.com/sviatoslav/portbook-skills).
-The skill and binary are maintained separately; use the installed binary's
-scoped help for supported commands and output options.
+The [Portbook skill](https://github.com/sviatoslav/portbook-skills/blob/main/skills/portbook/SKILL.md)
+contains the recommended worktree workflow. The skill and binary are maintained
+separately; use the [command reference](REFERENCE.md) or installed binary's scoped
+help for command behavior.
 
-## Describe the project
+## Project configuration
 
-Put these choices in the project's `AGENTS.md` or linked documentation:
-
-- Service names, such as `api` and `web`.
-- The owner directory for each service, expressed relative to the checkout.
-- Permission to reserve a port when a booking is missing.
-- The startup flag or environment variable that supplies the port.
-
-For example:
+Keep service names, default ports, startup interfaces, and hook commands in the
+project's `AGENTS.md` or linked workflow documentation. For example:
 
 ```text
-Use the checkout root as the Portbook owner directory.
-The API service is named api. Start it with PORT set to its reserved port.
-Agents may reserve api when Portbook confirms its booking is missing.
-Keep the booking between server restarts.
+Services: api (PORT, default 8080), web (PORT, default 3000).
+Creation script: scripts/setup-worktree.sh
+Removal script: scripts/remove-worktree.sh
+Run Portbook commands from the checkout root.
 ```
 
-## Agent workflow
+## Integration examples
 
-1. Resolve the documented owner directory and service name.
-2. Inspect bookings with `portbook list --directory "$owner"`.
-3. Read the port with `portbook get api --directory "$owner"`.
-4. If the result confirms a missing booking and allocation is authorized, run
-   `portbook reserve api --directory "$owner"`.
-5. Start the service with that port. Handle storage or permission errors before retrying.
+These examples run from the checkout root.
 
-Use the project's shutdown command to stop a service. Keep its booking for the
-next start. For authorized worktree removal, release that owner's bookings while
-the directory still exists:
+### Creation script
+
+In the script or hook run automatically after the worktree directory is created:
 
 ```sh
-portbook release --all --directory "$owner"
+for service in api web; do
+  portbook get -- "$service" >/dev/null 2>&1 ||
+    portbook reserve -- "$service" >/dev/null || exit 1
+done
 ```
 
-Resolve release errors before removing the directory. Pool changes and global
-cleanup are separate, explicitly requested maintenance operations.
+### Service startup
+
+Read each port, falling back to its default when lookup fails:
+
+```sh
+api_port="$(portbook get api 2>/dev/null || printf '8080\n')"
+web_port="$(portbook get web 2>/dev/null || printf '3000\n')"
+```
+
+Pass the selected value through that service's `PORT` environment variable.
+
+### Removal script
+
+After stopping remaining worktree services, before deleting the directory:
+
+```sh
+portbook release --all
+```
